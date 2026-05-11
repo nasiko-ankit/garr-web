@@ -21,6 +21,12 @@ const initialForm = {
   ttl_seconds: "86400",
 };
 
+function bufferToPem(buffer: ArrayBuffer, label: string): string {
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+  const lines = base64.match(/.{1,64}/g) ?? [];
+  return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----`;
+}
+
 export default function RegisterPage() {
   const [form, setForm] = useState(initialForm);
   const [step, setStep] = useState<Step>("form");
@@ -29,6 +35,12 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<EntityOwner | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Generated keypair — private key kept as CryptoKey for in-browser signing
+  const [generatedPrivateKey, setGeneratedPrivateKey] = useState<CryptoKey | null>(null);
+  const [generatedPrivateKeyPem, setGeneratedPrivateKeyPem] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [signing, setSigning] = useState(false);
 
   const canSubmitForm = useMemo(() => {
     return Boolean(
@@ -47,6 +59,65 @@ export default function RegisterPage() {
     value: (typeof initialForm)[K]
   ) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function generateKeypair() {
+    setGenerating(true);
+    try {
+      const keyPair = await window.crypto.subtle.generateKey(
+        { name: "Ed25519" } as AlgorithmIdentifier,
+        true,
+        ["sign", "verify"]
+      ) as CryptoKeyPair;
+
+      const [privBuffer, pubBuffer] = await Promise.all([
+        window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey),
+        window.crypto.subtle.exportKey("spki", keyPair.publicKey),
+      ]);
+
+      const privPem = bufferToPem(privBuffer, "PRIVATE KEY");
+      const pubPem = bufferToPem(pubBuffer, "PUBLIC KEY");
+
+      setGeneratedPrivateKey(keyPair.privateKey);
+      setGeneratedPrivateKeyPem(privPem);
+      update("auth_public_key", pubPem);
+      update("auth_algorithm", "ed25519");
+    } catch {
+      setError("Keypair generation failed — your browser may not support Ed25519 Web Crypto.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function downloadPrivateKey() {
+    if (!generatedPrivateKeyPem) return;
+    const blob = new Blob([generatedPrivateKeyPem], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${form.owner_id || "garr"}-private.pem`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function autoSign() {
+    if (!generatedPrivateKey || !pending) return;
+    setSigning(true);
+    try {
+      const nonceBytes = new Uint8Array(
+        (pending.challenge_nonce.match(/.{1,2}/g) ?? []).map((b) => parseInt(b, 16))
+      );
+      const sigBuffer = await window.crypto.subtle.sign(
+        { name: "Ed25519" } as AlgorithmIdentifier,
+        generatedPrivateKey,
+        nonceBytes
+      );
+      setChallengeSig(btoa(String.fromCharCode(...new Uint8Array(sigBuffer))));
+    } catch {
+      setError("Auto-sign failed. Sign the nonce manually using the snippet below.");
+    } finally {
+      setSigning(false);
+    }
   }
 
   async function onSubmitForm(e: React.SyntheticEvent<HTMLFormElement>) {
@@ -147,6 +218,25 @@ export default function RegisterPage() {
               </p>
             </div>
 
+            {generatedPrivateKey && (
+              <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+                <p className="text-sm font-medium text-indigo-900 mb-2">
+                  You generated your keypair in this browser
+                </p>
+                <button
+                  type="button"
+                  onClick={autoSign}
+                  disabled={signing}
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {signing ? "Signing..." : "Sign automatically"}
+                </button>
+                <p className="mt-2 text-xs text-indigo-700">
+                  Or sign manually using the snippet on the right.
+                </p>
+              </div>
+            )}
+
             <TextAreaField
               label="Base64 signature"
               value={challengeSig}
@@ -227,13 +317,42 @@ console.log(sig.toString('base64'));`}</pre>
               </select>
             </label>
 
-            <TextAreaField
-              className="sm:col-span-2"
-              label="Public Key (PEM)"
-              value={form.auth_public_key}
-              onChange={(v) => update("auth_public_key", v)}
-              placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"
-            />
+            <div className="sm:col-span-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-700">Public Key (PEM)</span>
+                <button
+                  type="button"
+                  onClick={generateKeypair}
+                  disabled={generating}
+                  className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                >
+                  {generating ? "Generating..." : "Generate keypair"}
+                </button>
+              </div>
+
+              {generatedPrivateKeyPem && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+                  <p className="text-xs font-medium text-amber-900">
+                    Private key generated — save it now. It cannot be recovered.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={downloadPrivateKey}
+                    className="rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+                  >
+                    Download private key (.pem)
+                  </button>
+                </div>
+              )}
+
+              <textarea
+                rows={4}
+                value={form.auth_public_key}
+                placeholder={"-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"}
+                onChange={(e) => update("auth_public_key", e.target.value)}
+                className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-xs outline-none focus:ring-2 focus:ring-slate-300"
+              />
+            </div>
           </div>
 
           <div className="mt-6 flex items-center gap-3">
@@ -265,6 +384,9 @@ console.log(sig.toString('base64'));`}</pre>
             <li>Sign the nonce bytes with your ed25519 private key.</li>
             <li>Paste the base64 signature to complete registration.</li>
           </ol>
+          <p className="mt-4 text-xs text-slate-500">
+            Use <strong className="text-slate-700">Generate keypair</strong> to create a key in your browser — no CLI needed. Download and keep the private key; only the public key is sent to GARR.
+          </p>
         </div>
       </div>
     </PageShell>
