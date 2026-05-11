@@ -1,0 +1,50 @@
+import Link from "next/link";
+import { navigation } from "@/lib/site-data";
+
+export function Header() {
+  return (
+    <header className="sticky top-0 z-50 border-b border-black/5 bg-[color:var(--page-bg)]/90 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <Link href="#top" className="flex min-w-0 items-center gap-3">
+          <span className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-sm border border-black/10 bg-white px-3 text-sm font-semibold tracking-[0.28em] text-slate-900 shadow-sm">
+            GARR
+          </span>
+
+          <span className="hidden truncate font-serif text-lg italic tracking-tight text-slate-950 sm:block">
+            Global Agent Root Registry
+          </span>
+        </Link>
+
+        <nav className="ml-auto hidden items-center gap-7 text-[0.72rem] uppercase tracking-[0.22em] text-slate-600 lg:flex">
+          {navigation.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="transition-colors hover:text-slate-950"
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+
+        <details className="relative ml-auto lg:hidden">
+          <summary className="cursor-pointer list-none border border-black/10 bg-white px-4 py-2 text-xs uppercase tracking-[0.2em] text-slate-700 shadow-sm">
+            Menu
+          </summary>
+
+          <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-black/10 bg-white p-2 shadow-lg">
+            {navigation.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="block rounded-xl px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </details>
+      </div>
+    </header>
+  );
+}

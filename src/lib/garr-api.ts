@@ -1,0 +1,167 @@
+import type {
+  EntityOwner,
+  EntityOwnerWire,
+  EntityStatus,
+  PendingChallengeResponse,
+  RegisterPayload,
+} from "./garr-types";
+import { mockRegistries } from "./mock-data";
+
+const API_BASE = process.env.NEXT_PUBLIC_GARR_API_BASE_URL ?? "";
+
+export class ApiError extends Error {
+  status: number;
+  payload?: unknown;
+
+  constructor(message: string, status: number, payload?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+    cache: "no-store",
+  });
+
+  const text = await res.text();
+  let data: unknown = null;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+
+  if (!res.ok) {
+    const obj = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const message =
+      typeof obj["message"] === "string" ? obj["message"] :
+      typeof obj["error"] === "string" ? obj["error"] :
+      `Request failed with status ${res.status}`;
+    throw new ApiError(message, res.status, data);
+  }
+
+  return data as T;
+}
+
+/** Maps a flat EntityOwnerWire from the backend into the nested EntityOwner shape used by the UI. */
+export function toEntityOwner(wire: EntityOwnerWire): EntityOwner {
+  return {
+    owner_id: wire.owner_id,
+    display_name: wire.display_name,
+    domain: wire.domain,
+    contact_email: wire.contact_email,
+    ttl_seconds: wire.ttl_seconds,
+    serial: wire.serial,
+    status: wire.status,
+    auth: {
+      algorithm: wire.algorithm,
+      public_key: wire.public_key,
+      key_id: wire.key_id,
+      // dmarc_policy is write-time only and never returned by read endpoints
+      dmarc_policy: "",
+    },
+    rap: {
+      url: wire.rap_url,
+      ...(wire.rap_fallback ? { fallback_url: wire.rap_fallback } : {}),
+      protocol: "https",
+    },
+    signature: {
+      signed_by: wire.signed_by,
+      value: wire.signature_value,
+      issued_at: wire.issued_at,
+      expires_at: wire.expires_at,
+    },
+  };
+}
+
+/** Step 1 of registration — POST /api/v1/register → 202 challenge nonce. */
+export async function registerOwner(
+  payload: RegisterPayload
+): Promise<PendingChallengeResponse> {
+  return request<PendingChallengeResponse>("/api/v1/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Step 2 of registration — POST /api/v1/register/:owner_id/verify → 201 EntityOwner. */
+export async function verifyOwner(
+  ownerId: string,
+  challengeSignature: string
+): Promise<EntityOwner> {
+  const wire = await request<EntityOwnerWire>(
+    `/api/v1/register/${encodeURIComponent(ownerId)}/verify`,
+    {
+      method: "POST",
+      body: JSON.stringify({ challenge_signature: challengeSignature }),
+    }
+  );
+  return toEntityOwner(wire);
+}
+
+/** GET /api/v1/owners/:owner_id → EntityOwner. */
+export async function getRegistry(ownerId: string): Promise<EntityOwner> {
+  const wire = await request<EntityOwnerWire>(
+    `/api/v1/owners/${encodeURIComponent(ownerId)}`
+  );
+  return toEntityOwner(wire);
+}
+
+/** GET /api/v1/search?q= → EntityOwner[]. */
+export async function searchRegistries(q: string): Promise<EntityOwner[]> {
+  const res = await request<{ results: EntityOwnerWire[] }>(
+    `/api/v1/search?q=${encodeURIComponent(q)}`
+  );
+  return (res.results ?? []).map(toEntityOwner);
+}
+
+/**
+ * Resolve a domain by searching for it and returning the first match.
+ * Throws ApiError(404) if no match is found.
+ */
+export async function resolveDomain(domain: string): Promise<EntityOwner> {
+  const res = await request<{ results: EntityOwnerWire[] }>(
+    `/api/v1/search?q=${encodeURIComponent(domain)}`
+  );
+  const results = res.results ?? [];
+  if (results.length === 0) {
+    throw new ApiError("not_found", 404);
+  }
+  return toEntityOwner(results[0]);
+}
+
+/**
+ * List all active owners by fetching the root manifest and extracting entity_owners.
+ * Optionally filter by status. Uses option C (§manifest) — zero backend changes required.
+ */
+export async function listRegistries(
+  status?: EntityStatus | "all"
+): Promise<EntityOwner[]> {
+  const manifest = await request<{ entity_owners: EntityOwnerWire[] }>(
+    "/global_agent_root.json"
+  );
+  const wires = manifest.entity_owners ?? [];
+  const filtered =
+    !status || status === "all"
+      ? wires
+      : wires.filter((w) => w.status === status);
+  return filtered.map(toEntityOwner);
+}
+
+/** GET /global_agent_root.json — the signed root manifest. */
+export async function getManifest(): Promise<unknown> {
+  return request<unknown>("/global_agent_root.json");
+}
+
+export function getMockRegistries(): EntityOwner[] {
+  return mockRegistries;
+}
