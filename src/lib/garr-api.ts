@@ -42,10 +42,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const obj = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    // GARR error envelope is `{ error, detail }`. `detail` is the human-readable
+    // explanation ("domain 'X' is already registered") — surface it first so the
+    // UI shows the why, not just the code.
+    const errorCode = typeof obj["error"] === "string" ? obj["error"] : null;
+    const detail = typeof obj["detail"] === "string" ? obj["detail"] : null;
     const message =
-      typeof obj["message"] === "string" ? obj["message"] :
-      typeof obj["error"] === "string" ? obj["error"] :
-      `Request failed with status ${res.status}`;
+      detail && errorCode ? `${errorCode} — ${detail}` :
+      detail ?? errorCode ??
+      (typeof obj["message"] === "string" ? obj["message"] : `Request failed with status ${res.status}`);
     throw new ApiError(message, res.status, data);
   }
 
@@ -129,14 +134,17 @@ export async function searchRegistries(q: string): Promise<EntityOwner[]> {
  * Throws ApiError(404) if no match is found.
  */
 export async function resolveDomain(domain: string): Promise<EntityOwner> {
+  const needle = domain.trim().toLowerCase();
   const res = await request<{ results: EntityOwnerWire[] }>(
-    `/api/v1/search?q=${encodeURIComponent(domain)}`
+    `/api/v1/search?q=${encodeURIComponent(needle)}`
   );
-  const results = res.results ?? [];
-  if (results.length === 0) {
+  const match = (res.results ?? []).find(
+    (r) => r.domain.toLowerCase() === needle
+  );
+  if (!match) {
     throw new ApiError("not_found", 404);
   }
-  return toEntityOwner(results[0]);
+  return toEntityOwner(match);
 }
 
 /**

@@ -61,7 +61,10 @@ export default function SearchPage() {
           placeholder="Search keyword..."
           className="flex-1 rounded-2xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300"
         />
-        <button className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white">
+        <button
+          disabled={loading}
+          className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+        >
           {loading ? "Searching..." : "Search"}
         </button>
       </form>
@@ -78,7 +81,7 @@ export default function SearchPage() {
           description="Run a search to see matching registries."
         />
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
           <div className="space-y-4">
             {items.map((item) => (
               <div

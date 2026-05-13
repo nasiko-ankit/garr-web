@@ -105,7 +105,10 @@ export default function QueryPage() {
             }
             className="rounded-2xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300"
           />
-          <button className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white">
+          <button
+            disabled={loading || !query.trim()}
+            className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
             {loading ? "Running..." : "Run query"}
           </button>
         </div>

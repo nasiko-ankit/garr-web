@@ -83,14 +83,19 @@ export default function RegistriesPage() {
           actionHref="/register"
         />
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1.4fr_0.9fr]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
           <div className="overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm">
-            <table className="w-full text-left">
+            <table className="w-full table-fixed text-left">
+              <colgroup>
+                <col style={{ width: "40%" }} />
+                <col style={{ width: "40%" }} />
+                <col style={{ width: "20%" }} />
+              </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-[0.18em] text-slate-500">
                 <tr>
-                  <th className="px-5 py-4">Owner</th>
-                  <th className="px-5 py-4">Domain</th>
-                  <th className="px-5 py-4">Status</th>
+                  <th className="px-4 py-4">Owner</th>
+                  <th className="px-4 py-4">Domain</th>
+                  <th className="px-4 py-4">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -100,14 +105,14 @@ export default function RegistriesPage() {
                     onClick={() => setSelected(item)}
                     className="cursor-pointer border-t hover:bg-slate-50"
                   >
-                    <td className="px-5 py-4">
-                      <div className="font-medium text-slate-950">
+                    <td className="px-4 py-4 align-top">
+                      <div className="font-medium text-slate-950 break-words">
                         {item.display_name}
                       </div>
-                      <div className="text-sm text-slate-500">{item.owner_id}</div>
+                      <div className="text-sm text-slate-500 break-all">{item.owner_id}</div>
                     </td>
-                    <td className="px-5 py-4">{item.domain}</td>
-                    <td className="px-5 py-4">
+                    <td className="px-4 py-4 align-top break-all">{item.domain}</td>
+                    <td className="px-4 py-4 align-top">
                       <StatusBadge status={item.status} />
                     </td>
                   </tr>
@@ -116,7 +121,7 @@ export default function RegistriesPage() {
             </table>
           </div>
 
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {selected ? (
               <>
                 <div className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">

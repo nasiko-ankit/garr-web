@@ -1,11 +1,20 @@
+"use client";
+
+import { useRef } from "react";
 import Link from "next/link";
 import { navigation } from "@/lib/site-data";
 
 export function Header() {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+
+  function closeMobileMenu() {
+    if (detailsRef.current) detailsRef.current.open = false;
+  }
+
   return (
     <header className="sticky top-0 z-50 border-b border-black/5 bg-[color:var(--page-bg)]/90 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <Link href="#top" className="flex min-w-0 items-center gap-3">
+        <Link href="/" className="flex min-w-0 items-center gap-3">
           <span className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-sm border border-black/10 bg-white px-3 text-sm font-semibold tracking-[0.28em] text-slate-900 shadow-sm">
             GARR
           </span>
@@ -27,7 +36,7 @@ export function Header() {
           ))}
         </nav>
 
-        <details className="relative ml-auto lg:hidden">
+        <details ref={detailsRef} className="relative ml-auto lg:hidden">
           <summary className="cursor-pointer list-none border border-black/10 bg-white px-4 py-2 text-xs uppercase tracking-[0.2em] text-slate-700 shadow-sm">
             Menu
           </summary>
@@ -37,6 +46,7 @@ export function Header() {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={closeMobileMenu}
                 className="block rounded-xl px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950"
               >
                 {item.label}

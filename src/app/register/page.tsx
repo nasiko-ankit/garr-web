@@ -254,7 +254,12 @@ export default function RegisterPage() {
               </button>
               <button
                 type="button"
-                onClick={() => { setStep("form"); setError(null); }}
+                onClick={() => {
+                  setStep("form");
+                  setError(null);
+                  setPending(null);
+                  setChallengeSig("");
+                }}
                 className="rounded-2xl border border-black/10 px-5 py-3 text-sm"
               >
                 Back
