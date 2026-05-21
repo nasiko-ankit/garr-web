@@ -5,6 +5,7 @@ export const navigation = [
   { href: "/resolve", label: "Resolve" },
   { href: "/search", label: "Search" },
   { href: "/query", label: "Agent Query" },
+  { href: "/demo/resolve", label: "Cross-registry demo" },
 ];
 
 export const heroStats = [
