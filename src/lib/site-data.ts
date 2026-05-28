@@ -5,6 +5,7 @@ export const navigation = [
   { href: "/resolve", label: "Resolve" },
   { href: "/search", label: "Search" },
   { href: "/query", label: "Agent Query" },
+  { href: "/demo/agents/new", label: "Register agent (demo)" },
   { href: "/demo/resolve", label: "Cross-registry demo" },
 ];
 

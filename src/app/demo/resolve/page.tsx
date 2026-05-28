@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PageShell } from "@/components/PageShell";
 import { JsonPanel } from "@/components/JsonPanel";
 
@@ -133,9 +134,21 @@ function StepCard({
 }
 
 export default function CrossRegistryDemoPage() {
+  const searchParams = useSearchParams();
   const [locator, setLocator] = useState(
     "order-status@walmart-demo.local:global"
   );
+
+  // Honor ?prefill= so the "try this new agent" link from /demo/agents/new
+  // lands here with the new locator pre-filled and immediately resolved.
+  useEffect(() => {
+    const prefill = searchParams.get("prefill");
+    if (prefill && prefill !== locator) {
+      setLocator(prefill);
+      void runResolve(prefill);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const [parseStatus, setParseStatus] = useState<StepStatus>("pending");
   const [parsed, setParsed] = useState<
