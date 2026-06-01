@@ -27,6 +27,20 @@ function bufferToPem(buffer: ArrayBuffer, label: string): string {
   return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----`;
 }
 
+function friendlyRegisterError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    const msg = err.message.toLowerCase();
+    if (msg.includes("serial_not_monotonic")) {
+      return `${err.status}: serial collision — another registration completed at the same instant. Re-submit to retry.`;
+    }
+    if (msg.includes("signature_invalid")) {
+      return `${err.status}: signature did not verify. Ensure you signed the raw nonce bytes (hex-decoded) with the private key matching the public key submitted in step 1.`;
+    }
+    return `${err.status}: ${err.message}`;
+  }
+  return fallback;
+}
+
 export default function RegisterPage() {
   const [form, setForm] = useState(initialForm);
   const [step, setStep] = useState<Step>("form");
@@ -143,8 +157,7 @@ export default function RegisterPage() {
       setPending(challenge);
       setStep("challenge");
     } catch (err) {
-      if (err instanceof ApiError) setError(`${err.status}: ${err.message}`);
-      else setError("Something went wrong while submitting the registration.");
+      setError(friendlyRegisterError(err, "Something went wrong while submitting the registration."));
     } finally {
       setSubmitting(false);
     }
@@ -161,8 +174,7 @@ export default function RegisterPage() {
       setResult(owner);
       setStep("done");
     } catch (err) {
-      if (err instanceof ApiError) setError(`${err.status}: ${err.message}`);
-      else setError("Verification failed.");
+      setError(friendlyRegisterError(err, "Verification failed."));
     } finally {
       setSubmitting(false);
     }
@@ -292,8 +304,8 @@ console.log(sig.toString('base64'));`}</pre>
 
   return (
     <PageShell
-      title="Register"
-      description="Step 1 of 2 — submit owner details. You will receive a challenge nonce to sign with your private key."
+      title="Register your Registry"
+      description="Onboard a new organization's registry into the Nanda Index. Step 1 of 2 — submit owner details. You will receive a challenge nonce to sign with your private key."
     >
       <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
         <form

@@ -1,18 +1,16 @@
 export const navigation = [
   { href: "/", label: "Overview" },
-  { href: "/register", label: "Register" },
+  { href: "/demo", label: "Demo" },
+  { href: "/register", label: "Register Registry" },
+  { href: "/demo/agents/new", label: "Register Agent" },
+  { href: "/demo/resolve", label: "A2A Card Exchange" },
   { href: "/registries", label: "Browse" },
-  { href: "/resolve", label: "Resolve" },
-  { href: "/search", label: "Search" },
-  { href: "/query", label: "Agent Query" },
-  { href: "/demo/agents/new", label: "Register agent (demo)" },
-  { href: "/demo/resolve", label: "Cross-registry demo" },
 ];
 
 export const heroStats = [
-  { value: "3", label: "registered registries" },
-  { value: "3", label: "active / verified" },
-  { value: "2026041103", label: "root serial" },
+  { value: "2", label: "demo registries (google, meta)" },
+  { value: "3", label: "demo steps" },
+  { value: "Ed25519", label: "signing algorithm" },
   { value: "24h", label: "default TTL" },
 ];
 

@@ -1,9 +1,12 @@
 import type {
+  AgentCard,
+  AgentRegistrationPayload,
   EntityOwner,
   EntityOwnerWire,
   EntityStatus,
   PendingChallengeResponse,
   RegisterPayload,
+  ResolveResponse,
 } from "./garr-types";
 import { mockRegistries } from "./mock-data";
 
@@ -168,6 +171,55 @@ export async function listRegistries(
 /** GET /global_agent_root.json — the signed root manifest. */
 export async function getManifest(): Promise<unknown> {
   return request<unknown>("/global_agent_root.json");
+}
+
+/**
+ * GET /api/v1/resolve?locator=<id>@<ns>:<mode> — the real Layer-1→2→3
+ * resolution endpoint. Returns the signed IndexRecord (from GARR) plus the
+ * signed AgentCard (fetched by GARR from the org's RAP).
+ */
+export async function resolveLocator(locator: string): Promise<ResolveResponse> {
+  return request<ResolveResponse>(
+    `/api/v1/resolve?locator=${encodeURIComponent(locator)}`
+  );
+}
+
+/**
+ * POST {rap_url}/agents — register a new agent into a registry (L2).
+ * The RAP signs the card with the org's root key and returns the signed card.
+ * Hits the mock-rap server directly (not the GARR API), so we use a raw fetch.
+ */
+export async function registerAgent(
+  rapBaseUrl: string,
+  payload: AgentRegistrationPayload
+): Promise<AgentCard> {
+  const url = `${rapBaseUrl.replace(/\/$/, "")}/agents`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+
+  const text = await res.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+
+  if (!res.ok) {
+    const obj = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const errorCode = typeof obj["error"] === "string" ? obj["error"] : null;
+    const detail = typeof obj["detail"] === "string" ? obj["detail"] : null;
+    const message =
+      detail && errorCode ? `${errorCode} — ${detail}` :
+      detail ?? errorCode ?? `RAP request failed with status ${res.status}`;
+    throw new ApiError(message, res.status, data);
+  }
+
+  return data as AgentCard;
 }
 
 export function getMockRegistries(): EntityOwner[] {

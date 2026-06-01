@@ -77,3 +77,50 @@ export interface RegisterPayload {
   key_id: string;
   ttl_seconds: number;
 }
+
+// GET /api/v1/resolve?locator=... response (§3.3)
+export type ResolutionMode = "global" | "dnssrv" | "nandaindex.org";
+
+export interface IndexRecord {
+  agent_id: string;
+  agent_name: string;
+  card_url: string;
+  ttl: number;
+  signature: string;
+}
+
+export type AgentProtocol = "a2a" | "rest" | "mcp";
+
+export interface AgentCard {
+  id: string;
+  display_name: string;
+  description: string;
+  version: string;
+  capabilities: string[];
+  invocation_url: string;
+  protocol: AgentProtocol | string;
+  visibility: string;
+  signed_by: string;
+  signature: string;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+export interface ResolveResponse {
+  locator: string;
+  resolution_mode: ResolutionMode;
+  resolved_via: string;
+  index_record: IndexRecord;
+  agent_card: AgentCard;
+}
+
+// Body for POST {rap_url}/agents (L2 — register agent into a registry)
+export interface AgentRegistrationPayload {
+  name: string;
+  display_name: string;
+  description: string;
+  capabilities: string[];
+  protocol: AgentProtocol;
+  invocation_url?: string;
+}
