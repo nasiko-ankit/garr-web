@@ -113,23 +113,29 @@ export default function DemoDashboardPage() {
         <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">
           Suggested demo order
         </div>
+        <p className="mt-3 text-xs text-slate-500">
+          Two organisations (google.demo and meta.demo) are pre-seeded so Step
+          3 has data to resolve. Steps 1 and 2 add a third organisation and a
+          new agent live in the UI.
+        </p>
         <ol className="mt-3 list-decimal list-inside space-y-2 text-sm text-slate-700">
           <li>
-            <strong>A2A Card Exchange</strong> first — show the manager's example
-            resolving immediately ({" "}
+            <strong>Register Registry</strong> — onboard a brand-new
+            organisation (e.g. <span className="font-mono">acme.demo</span>) to
+            show the registration + challenge-signing flow.
+          </li>
+          <li>
+            <strong>Register Agent</strong> — add a new agent (e.g.{" "}
+            <span className="font-mono">analytics-agent</span> at{" "}
+            <span className="font-mono">google.demo</span>); the registry signs
+            and stores the card.
+          </li>
+          <li>
+            <strong>A2A Card Exchange</strong> — show the headline scenario
+            resolving end-to-end ({" "}
             <span className="font-mono">search-agent@google.demo</span> ↔{" "}
             <span className="font-mono">products-agent@meta.demo</span>). Both
-            cards exchange end-to-end.
-          </li>
-          <li>
-            <strong>Register Agent</strong> next — add a new agent (e.g.{" "}
-            <span className="font-mono">analytics-agent</span> at{" "}
-            <span className="font-mono">google.demo</span>), then click through
-            to A2A Card Exchange to resolve the new agent live.
-          </li>
-          <li>
-            <strong>Register Registry</strong> last — onboard a brand-new
-            organization to show the bootstrapping flow.
+            cards exchange and verify.
           </li>
         </ol>
       </div>
