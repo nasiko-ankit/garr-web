@@ -7,9 +7,8 @@ import { SectionHeading } from "@/components/SectionHeading";
 const cards = [
   { href: "/register", title: "Register", desc: "Submit a new EntityOwner" },
   { href: "/registries", title: "Browse", desc: "View all registries" },
-  { href: "/resolve", title: "Resolve", desc: "Lookup by domain" },
-  { href: "/search", title: "Search", desc: "Keyword search" },
-  { href: "/query", title: "Agent Query", desc: "All query modes" },
+  { href: "/resolve", title: "Resolve", desc: "Lookup by agent locator" },
+  { href: "/query", title: "Agent Query", desc: "Registry lookup, domain resolve, keyword search" },
   { href: "/rap", title: "RAP Manager", desc: "Manage agents on your RAP" },
 ];
 

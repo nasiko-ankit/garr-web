@@ -245,6 +245,7 @@ export default function ResolvePage() {
       <form
         onSubmit={onResolve}
         className="mb-6 rounded-3xl border border-black/10 bg-white p-5 shadow-sm space-y-4"
+        suppressHydrationWarning
       >
         {/* Mode selector */}
         <div className="flex flex-wrap gap-2">

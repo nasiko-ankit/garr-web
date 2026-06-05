@@ -6,6 +6,8 @@ import { JsonPanel } from "@/components/JsonPanel";
 import { ApiError, registerOwner, verifyOwner } from "@/lib/garr-api";
 import type { AuthAlgorithm, EntityOwner, PendingChallengeResponse, RegisterPayload } from "@/lib/garr-types";
 
+type KeySource = null | "fetched" | "generated";
+
 type Step = "form" | "challenge" | "done";
 
 const initialForm = {
@@ -42,6 +44,12 @@ export default function RegisterPage() {
   const [generating, setGenerating] = useState(false);
   const [signing, setSigning] = useState(false);
 
+  // RAP key fetch + sign-via-RAP
+  const [fetchingRapKey, setFetchingRapKey] = useState(false);
+  const [keySource, setKeySource] = useState<KeySource>(null);
+  const [rapAdminKey, setRapAdminKey] = useState("");
+  const [signingViaRap, setSigningViaRap] = useState(false);
+
   const canSubmitForm = useMemo(() => {
     return Boolean(
       form.owner_id &&
@@ -59,6 +67,55 @@ export default function RegisterPage() {
     value: (typeof initialForm)[K]
   ) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function fetchRapKey() {
+    const url = form.rap_url.trim();
+    if (!url) { setError("Enter a RAP URL first, then fetch its key."); return; }
+    setFetchingRapKey(true);
+    setError(null);
+    try {
+      const res = await fetch(`${url}/.well-known/garr-public-key`, {
+        headers: { "ngrok-skip-browser-warning": "true" },
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`RAP returned ${res.status}`);
+      const data = await res.json() as { public_key: string; key_id: string; algorithm: string };
+      update("auth_public_key", data.public_key);
+      update("auth_key_id", data.key_id);
+      update("auth_algorithm", data.algorithm as AuthAlgorithm);
+      setKeySource("fetched");
+      setGeneratedPrivateKey(null);
+      setGeneratedPrivateKeyPem(null);
+    } catch (err) {
+      setError(`Could not fetch key from RAP: ${err instanceof Error ? err.message : "unreachable"}. Make sure the RAP server is running.`);
+    } finally {
+      setFetchingRapKey(false);
+    }
+  }
+
+  async function signViaRap() {
+    if (!pending || !form.rap_url.trim() || !rapAdminKey.trim()) return;
+    setSigningViaRap(true);
+    setError(null);
+    try {
+      const res = await fetch(`${form.rap_url.trim()}/.well-known/garr-sign-challenge`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${rapAdminKey.trim()}`,
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({ nonce: pending.challenge_nonce }),
+      });
+      if (!res.ok) throw new Error(`RAP returned ${res.status}`);
+      const data = await res.json() as { signature: string };
+      setChallengeSig(data.signature);
+    } catch (err) {
+      setError(`Could not sign via RAP: ${err instanceof Error ? err.message : "failed"}. Check the RAP URL and admin key.`);
+    } finally {
+      setSigningViaRap(false);
+    }
   }
 
   async function generateKeypair() {
@@ -82,6 +139,7 @@ export default function RegisterPage() {
       setGeneratedPrivateKeyPem(privPem);
       update("auth_public_key", pubPem);
       update("auth_algorithm", "ed25519");
+      setKeySource("generated");
     } catch {
       setError("Keypair generation failed — your browser may not support Ed25519 Web Crypto.");
     } finally {
@@ -218,6 +276,25 @@ export default function RegisterPage() {
               </p>
             </div>
 
+            {keySource === "fetched" && form.rap_url && rapAdminKey && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-sm font-medium text-emerald-900 mb-2">
+                  Key was fetched from your RAP — let the RAP sign automatically
+                </p>
+                <button
+                  type="button"
+                  onClick={signViaRap}
+                  disabled={signingViaRap}
+                  className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {signingViaRap ? "Signing..." : "Sign via RAP ✓"}
+                </button>
+                <p className="mt-2 text-xs text-emerald-700">
+                  Sends the nonce to your RAP server, which signs it with its private key.
+                </p>
+              </div>
+            )}
+
             {generatedPrivateKey && (
               <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
                 <p className="text-sm font-medium text-indigo-900 mb-2">
@@ -307,6 +384,19 @@ console.log(sig.toString('base64'));`}</pre>
             <Field label="Contact Email" value={form.contact_email} onChange={(v) => update("contact_email", v)} />
             <Field label="RAP URL" value={form.rap_url} onChange={(v) => update("rap_url", v)} />
             <Field label="RAP Fallback URL" value={form.rap_fallback_url} onChange={(v) => update("rap_fallback_url", v)} />
+            <label className="sm:col-span-2">
+              <span className="mb-1 block text-sm font-medium text-slate-700">
+                RAP Admin Key{" "}
+                <span className="font-normal text-slate-400">(needed to sign the challenge — kept only in this browser session)</span>
+              </span>
+              <input
+                type="password"
+                value={rapAdminKey}
+                onChange={(e) => setRapAdminKey(e.target.value)}
+                placeholder="Your ADMIN_API_KEY from the RAP .env"
+                className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300"
+              />
+            </label>
             <Field label="Key ID" value={form.auth_key_id} onChange={(v) => update("auth_key_id", v)} />
             <Field label="TTL Seconds" value={form.ttl_seconds} onChange={(v) => update("ttl_seconds", v)} />
 
@@ -325,20 +415,38 @@ console.log(sig.toString('base64'));`}</pre>
             <div className="sm:col-span-2 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-slate-700">Public Key (PEM)</span>
-                <button
-                  type="button"
-                  onClick={generateKeypair}
-                  disabled={generating}
-                  className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
-                >
-                  {generating ? "Generating..." : "Generate keypair"}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={fetchRapKey}
+                    disabled={fetchingRapKey || !form.rap_url.trim()}
+                    className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+                  >
+                    {fetchingRapKey ? "Fetching..." : "Fetch from RAP ✓"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={generateKeypair}
+                    disabled={generating}
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+                  >
+                    {generating ? "Generating..." : "Generate new keypair"}
+                  </button>
+                </div>
               </div>
 
-              {generatedPrivateKeyPem && (
+              {/* Key source banner */}
+              {keySource === "fetched" && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="text-xs font-medium text-emerald-800">
+                    ✓ Key fetched from RAP server — this key matches what your RAP uses to sign agent cards. Registration will succeed.
+                  </p>
+                </div>
+              )}
+              {keySource === "generated" && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-2">
                   <p className="text-xs font-medium text-amber-900">
-                    Private key generated — save it now. It cannot be recovered.
+                    ⚠ You generated a new browser keypair. This only works if your RAP server does NOT already have a key configured, or you update the RAP&apos;s SIGNING_PRIVATE_KEY to this new key. If your RAP is already running with its own key, use &quot;Fetch from RAP&quot; instead.
                   </p>
                   <button
                     type="button"
@@ -348,6 +456,11 @@ console.log(sig.toString('base64'));`}</pre>
                     Download private key (.pem)
                   </button>
                 </div>
+              )}
+              {keySource === null && (
+                <p className="text-xs text-slate-500">
+                  If your RAP server is already running, click <strong>Fetch from RAP</strong> — it reads the exact key the RAP uses to sign agent cards, guaranteeing they match.
+                </p>
               )}
 
               <textarea
