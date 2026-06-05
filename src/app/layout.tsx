@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: "GARR — Global Agent Root Registry",
   description:
     "A DNS-inspired trust framework for cross-organization AI agent discovery.",
-  metadataBase: new URL("https://example.com"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://garr.dev"),
   openGraph: {
     title: "GARR — Global Agent Root Registry",
     description:

@@ -64,6 +64,38 @@ export interface EntityOwner {
   signature: GarrSignature;
 }
 
+// GET /api/v1/resolve response types
+export interface IndexRecord {
+  agent_id: string;
+  agent_name: string;
+  card_url: string;
+  ttl: number;
+  signature: string;
+}
+
+export interface AgentCard {
+  id: string;
+  display_name: string;
+  description: string;
+  version: string;
+  capabilities: string[];
+  invocation_url: string;
+  protocol: string;
+  visibility: string;
+  signed_by: string;
+  created_at: string;
+  updated_at: string;
+  signature: string;
+}
+
+export interface ResolveResponse {
+  locator: string;
+  resolution_mode: string;
+  resolved_via: string;
+  index_record: IndexRecord;
+  agent_card: AgentCard;
+}
+
 // Flat body sent to POST /api/v1/register
 export interface RegisterPayload {
   owner_id: string;

@@ -7,7 +7,6 @@ import { JsonPanel } from "@/components/JsonPanel";
 import { TableEmptyState } from "@/components/TableEmptyState";
 import { ApiError, searchRegistries } from "@/lib/garr-api";
 import type { EntityOwner } from "@/lib/garr-types";
-import { getMockRegistries } from "@/lib/garr-api";
 import { truncate } from "@/lib/utils";
 
 export default function SearchPage() {
@@ -34,13 +33,7 @@ export default function SearchPage() {
     } catch (err) {
       if (err instanceof ApiError) setError(`${err.status}: ${err.message}`);
       else setError("Search failed.");
-      const fallback = getMockRegistries().filter((item) =>
-        [item.owner_id, item.display_name, item.domain]
-          .join(" ")
-          .toLowerCase()
-          .includes(q.trim().toLowerCase())
-      );
-      setItems(fallback);
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -49,7 +42,7 @@ export default function SearchPage() {
   return (
     <PageShell
       title="Search"
-      description="Keyword search across owner_id, domain, and display_name, with highlighted results."
+      description="Search registered organizations by name, domain, or owner ID."
     >
       <form
         onSubmit={onSearch}

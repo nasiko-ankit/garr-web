@@ -4,8 +4,8 @@ import type {
   EntityStatus,
   PendingChallengeResponse,
   RegisterPayload,
+  ResolveResponse,
 } from "./garr-types";
-import { mockRegistries } from "./mock-data";
 
 const API_BASE = process.env.NEXT_PUBLIC_GARR_API_BASE_URL ?? "";
 
@@ -170,6 +170,18 @@ export async function getManifest(): Promise<unknown> {
   return request<unknown>("/global_agent_root.json");
 }
 
-export function getMockRegistries(): EntityOwner[] {
-  return mockRegistries;
+/**
+ * GET /api/v1/resolve?locator=<agent>@<domain>:<mode>
+ * Returns a fully verified AgentCard + IndexRecord (Layer 3 resolution).
+ *
+ * Locator format: agent@domain:mode
+ *   mode = global | dnssrv | nandaindex.org
+ *
+ * Example: scheduler@nasiko.com:global
+ */
+export async function resolveAgent(locator: string): Promise<ResolveResponse> {
+  return request<ResolveResponse>(
+    `/api/v1/resolve?locator=${encodeURIComponent(locator)}`
+  );
 }
+
