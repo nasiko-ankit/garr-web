@@ -3,7 +3,6 @@ export const navigation = [
   { href: "/register", label: "Register" },
   { href: "/registries", label: "Browse" },
   { href: "/resolve", label: "Resolve" },
-  { href: "/search", label: "Search" },
   { href: "/query", label: "Agent Query" },
   { href: "/rap", label: "RAP Manager" },
 ];
