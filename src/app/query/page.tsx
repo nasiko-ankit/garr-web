@@ -10,7 +10,6 @@ import {
   resolveDomain,
   searchRegistries,
 } from "@/lib/garr-api";
-import { getMockRegistries } from "@/lib/garr-api";
 
 type Mode = "registry" | "resolve" | "search";
 
@@ -46,23 +45,6 @@ export default function QueryPage() {
     } catch (err) {
       if (err instanceof ApiError) setError(`${err.status}: ${err.message}`);
       else setError("Query failed.");
-
-      const fallback = getMockRegistries();
-      if (mode === "search") {
-        setResult(
-          fallback.filter((item) =>
-            [item.owner_id, item.display_name, item.domain]
-              .join(" ")
-              .toLowerCase()
-              .includes(query.trim().toLowerCase())
-          )
-        );
-      } else if (mode === "resolve") {
-        setResult(fallback.find((item) => item.domain === query.trim()) ?? null);
-      } else {
-        setResult(fallback.find((item) => item.owner_id === query.trim()) ?? null);
-      }
-
       setLatency(Math.round(performance.now() - start));
     } finally {
       setLoading(false);
@@ -72,7 +54,7 @@ export default function QueryPage() {
   return (
     <PageShell
       title="Agent Query"
-      description="One interface for registry lookup, domain resolve, and keyword search. Shows latency and returns JSON."
+      description="Look up a registry by owner ID, resolve a domain, or run a keyword search."
     >
       <form className="space-y-4 rounded-3xl border border-black/10 bg-white p-5 shadow-sm" onSubmit={runQuery}>
         <div className="flex flex-wrap gap-2">
@@ -101,7 +83,7 @@ export default function QueryPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={
-              mode === "resolve" ? "att.com" : mode === "search" ? "att" : "att"
+              mode === "resolve" ? "google.com" : mode === "search" ? "nasiko" : "nasiko"
             }
             className="rounded-2xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300"
           />

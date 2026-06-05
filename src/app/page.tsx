@@ -10,6 +10,7 @@ const cards = [
   { href: "/resolve", title: "Resolve", desc: "Lookup by domain" },
   { href: "/search", title: "Search", desc: "Keyword search" },
   { href: "/query", title: "Agent Query", desc: "All query modes" },
+  { href: "/rap", title: "RAP Manager", desc: "Manage agents on your RAP" },
 ];
 
 export default function HomePage() {

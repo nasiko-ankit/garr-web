@@ -7,7 +7,6 @@ import { JsonPanel } from "@/components/JsonPanel";
 import { TableEmptyState } from "@/components/TableEmptyState";
 import { ApiError, listRegistries } from "@/lib/garr-api";
 import type { EntityOwner, EntityStatus } from "@/lib/garr-types";
-import { getMockRegistries } from "@/lib/garr-api";
 
 export default function RegistriesPage() {
   const [status, setStatus] = useState<EntityStatus | "all">("all");
@@ -27,13 +26,8 @@ export default function RegistriesPage() {
     } catch (err) {
       if (err instanceof ApiError) setError(`${err.status}: ${err.message}`);
       else setError("Could not load registries.");
-      const fallback = getMockRegistries();
-      const filtered =
-        nextStatus === "all"
-          ? fallback
-          : fallback.filter((item) => item.status === nextStatus);
-      setItems(filtered);
-      setSelected(filtered[0] ?? null);
+      setItems([]);
+      setSelected(null);
     } finally {
       setLoading(false);
     }
@@ -47,7 +41,7 @@ export default function RegistriesPage() {
   return (
     <PageShell
       title="Browse Registries"
-      description="Table view with status filter and expandable row details, matching the frontend checklist in the spec."
+      description="Browse all registered organizations in the global registry."
     >
       <div className="mb-4 flex flex-wrap gap-2">
         {(["all", "active", "stale", "pending", "suspended"] as const).map((s) => (
@@ -73,9 +67,7 @@ export default function RegistriesPage() {
         <div className="mb-6 rounded-3xl border border-rose-200 bg-rose-50 p-4 text-rose-700">
           {error}
         </div>
-      ) : null}
-
-      {!loading && items.length === 0 ? (
+      ) : items.length === 0 ? (
         <TableEmptyState
           title="No registries found"
           description="There are no matching registries for the selected filter."

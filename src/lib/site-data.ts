@@ -5,6 +5,7 @@ export const navigation = [
   { href: "/resolve", label: "Resolve" },
   { href: "/search", label: "Search" },
   { href: "/query", label: "Agent Query" },
+  { href: "/rap", label: "RAP Manager" },
 ];
 
 export const heroStats = [
