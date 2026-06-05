@@ -132,6 +132,10 @@ export async function searchRegistries(q: string): Promise<EntityOwner[]> {
 /**
  * Resolve a domain by searching for it and returning the first match.
  * Throws ApiError(404) if no match is found.
+ *
+ * NOTE: uses the search endpoint as a proxy — if the backend paginates and
+ * the exact domain falls outside the first page, this will incorrectly 404.
+ * A dedicated GET /api/v1/owners?domain= endpoint would fix this properly.
  */
 export async function resolveDomain(domain: string): Promise<EntityOwner> {
   const needle = domain.trim().toLowerCase();

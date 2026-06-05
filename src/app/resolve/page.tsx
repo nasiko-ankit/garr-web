@@ -7,6 +7,7 @@ import { TableEmptyState } from "@/components/TableEmptyState";
 import { ApiError, resolveAgent } from "@/lib/garr-api";
 import type { ResolveResponse } from "@/lib/garr-types";
 import { cn } from "@/lib/utils";
+import { ProtocolBadge, VisibilityBadge } from "@/components/AgentBadges";
 
 type ResolutionMode = "global" | "dnssrv" | "nandaindex.org";
 
@@ -15,29 +16,6 @@ const MODE_DESCRIPTIONS: Record<ResolutionMode, string> = {
   dnssrv: "Queries _agentindex._tcp.<domain> DNS SRV record → looks up agent in the index server found there.",
   "nandaindex.org": "Queries the public NANDA index at nandaindex.org to find the agent's card URL.",
 };
-
-function ProtocolBadge({ protocol }: { protocol: string }) {
-  const colors: Record<string, string> = {
-    a2a: "border-violet-200 bg-violet-50 text-violet-700",
-    mcp: "border-blue-200 bg-blue-50 text-blue-700",
-    rest: "border-slate-200 bg-slate-50 text-slate-700",
-    https: "border-teal-200 bg-teal-50 text-teal-700",
-  };
-  return (
-    <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em]", colors[protocol] ?? colors.rest)}>
-      {protocol}
-    </span>
-  );
-}
-
-function VisibilityBadge({ visibility }: { visibility: string }) {
-  return (
-    <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em]",
-      visibility === "private" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700")}>
-      {visibility}
-    </span>
-  );
-}
 
 function ResolutionPath({ result }: { result: ResolveResponse }) {
   const steps =
@@ -188,25 +166,20 @@ export default function ResolvePage() {
   const [liveOrgs, setLiveOrgs] = useState<{ owner_id: string; domain: string; firstAgent: string }[]>([]);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_GARR_API_BASE_URL ?? ""}/global_agent_root.json`, { cache: "no-store" })
+    // Use default Next.js caching — the manifest is stable and signed; no need for no-store.
+    // Build "Try:" chips from the manifest alone (one request), using owner_id as the
+    // placeholder agent identifier. This avoids N per-RAP fetches on every page load.
+    fetch(`${process.env.NEXT_PUBLIC_GARR_API_BASE_URL ?? ""}/global_agent_root.json`)
       .then((r) => r.json())
-      .then(async (data: { entity_owners?: { owner_id: string; domain: string; rap_url: string }[] }) => {
+      .then((data: { entity_owners?: { owner_id: string; domain: string }[] }) => {
         const orgs = data.entity_owners ?? [];
-        const enriched = await Promise.all(
-          orgs.map(async (org) => {
-            try {
-              const r = await fetch(`${org.rap_url}/agents.json`, { cache: "no-store" });
-              if (!r.ok) return null;
-              const catalog = await r.json() as { agents?: { id: string }[] };
-              const slug = catalog.agents?.[0]?.id?.split("@")[0] ?? null;
-              if (!slug) return null;
-              return { owner_id: org.owner_id, domain: org.domain, firstAgent: slug };
-            } catch {
-              return null;
-            }
-          })
+        setLiveOrgs(
+          orgs.map((org) => ({
+            owner_id: org.owner_id,
+            domain: org.domain,
+            firstAgent: org.owner_id,
+          }))
         );
-        setLiveOrgs(enriched.filter(Boolean) as { owner_id: string; domain: string; firstAgent: string }[]);
       })
       .catch(() => {});
   }, []);
