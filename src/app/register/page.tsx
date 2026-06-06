@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { JsonPanel } from "@/components/JsonPanel";
 import { ApiError, registerOwner, verifyOwner } from "@/lib/garr-api";
+import { generateEd25519KeyPair, signHexBytes, downloadPem } from "@/lib/browser-crypto";
 import type { AuthAlgorithm, EntityOwner, PendingChallengeResponse, RegisterPayload } from "@/lib/garr-types";
 
 type KeySource = null | "fetched" | "generated";
@@ -27,6 +28,20 @@ function bufferToPem(buffer: ArrayBuffer, label: string): string {
   const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
   const lines = base64.match(/.{1,64}/g) ?? [];
   return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----`;
+}
+
+function friendlyRegisterError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    const msg = err.message.toLowerCase();
+    if (msg.includes("serial_not_monotonic")) {
+      return `${err.status}: serial collision — another registration completed at the same instant. Re-submit to retry.`;
+    }
+    if (msg.includes("signature_invalid")) {
+      return `${err.status}: signature did not verify. Ensure you signed the raw nonce bytes (hex-decoded) with the private key matching the public key submitted in step 1.`;
+    }
+    return `${err.status}: ${err.message}`;
+  }
+  return fallback;
 }
 
 export default function RegisterPage() {
@@ -121,23 +136,10 @@ export default function RegisterPage() {
   async function generateKeypair() {
     setGenerating(true);
     try {
-      const keyPair = await window.crypto.subtle.generateKey(
-        { name: "Ed25519" } as AlgorithmIdentifier,
-        true,
-        ["sign", "verify"]
-      ) as CryptoKeyPair;
-
-      const [privBuffer, pubBuffer] = await Promise.all([
-        window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey),
-        window.crypto.subtle.exportKey("spki", keyPair.publicKey),
-      ]);
-
-      const privPem = bufferToPem(privBuffer, "PRIVATE KEY");
-      const pubPem = bufferToPem(pubBuffer, "PUBLIC KEY");
-
-      setGeneratedPrivateKey(keyPair.privateKey);
-      setGeneratedPrivateKeyPem(privPem);
-      update("auth_public_key", pubPem);
+      const kp = await generateEd25519KeyPair();
+      setGeneratedPrivateKey(kp.privateKey);
+      setGeneratedPrivateKeyPem(kp.privateKeyPem);
+      update("auth_public_key", kp.publicKeyPem);
       update("auth_algorithm", "ed25519");
       setKeySource("generated");
     } catch {
@@ -149,28 +151,14 @@ export default function RegisterPage() {
 
   function downloadPrivateKey() {
     if (!generatedPrivateKeyPem) return;
-    const blob = new Blob([generatedPrivateKeyPem], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${form.owner_id || "garr"}-private.pem`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadPem(generatedPrivateKeyPem, `${form.owner_id || "garr"}-private.pem`);
   }
 
   async function autoSign() {
     if (!generatedPrivateKey || !pending) return;
     setSigning(true);
     try {
-      const nonceBytes = new Uint8Array(
-        (pending.challenge_nonce.match(/.{1,2}/g) ?? []).map((b) => parseInt(b, 16))
-      );
-      const sigBuffer = await window.crypto.subtle.sign(
-        { name: "Ed25519" } as AlgorithmIdentifier,
-        generatedPrivateKey,
-        nonceBytes
-      );
-      setChallengeSig(btoa(String.fromCharCode(...new Uint8Array(sigBuffer))));
+      setChallengeSig(await signHexBytes(generatedPrivateKey, pending.challenge_nonce));
     } catch {
       setError("Auto-sign failed. Sign the nonce manually using the snippet below.");
     } finally {

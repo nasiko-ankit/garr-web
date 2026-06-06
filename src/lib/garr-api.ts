@@ -21,19 +21,14 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
-
+/**
+ * Parses a Fetch Response and throws ApiError on non-2xx.
+ * Handles GARR's `{ error, detail }` envelope — surfaces `detail` first
+ * so the UI shows the why, not just the code.
+ */
+async function parseApiResponse<T>(res: Response): Promise<T> {
   const text = await res.text();
   let data: unknown = null;
-
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
@@ -42,9 +37,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const obj = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
-    // GARR error envelope is `{ error, detail }`. `detail` is the human-readable
-    // explanation ("domain 'X' is already registered") — surface it first so the
-    // UI shows the why, not just the code.
     const errorCode = typeof obj["error"] === "string" ? obj["error"] : null;
     const detail = typeof obj["detail"] === "string" ? obj["detail"] : null;
     const message =
@@ -55,6 +47,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return data as T;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+    cache: "no-store",
+  });
+  return parseApiResponse<T>(res);
 }
 
 /** Maps a flat EntityOwnerWire from the backend into the nested EntityOwner shape used by the UI. */

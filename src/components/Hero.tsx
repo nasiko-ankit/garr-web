@@ -6,7 +6,7 @@ export function Hero() {
       <div className="grid gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
         <div>
           <p className="text-sm uppercase tracking-[0.24em] text-slate-500">
-            Global Agent Root Registry
+            Nanda Index
           </p>
           <h1 className="mt-4 max-w-3xl font-serif text-5xl italic tracking-tight text-slate-950 sm:text-6xl">
             The authoritative index of AI agent registries worldwide.
