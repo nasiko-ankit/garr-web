@@ -443,13 +443,16 @@ export default function RegistryManagerPage() {
 
   async function deleteAgent() {
     if (!selected || !session) return;
+    const deletedId = selected.identifier;
     setDeleting(true);
     try {
-      await deleteRegistryAgent(session.registryUrl, session.token, selected.identifier);
-      await refresh();
-      setSelected(agents.find((a) => a.identifier !== selected.identifier) ?? null);
+      await deleteRegistryAgent(session.registryUrl, session.token, deletedId);
+      // Fetch fresh list so selection uses post-delete state, not stale closure
+      const data = await fetchRegistryAgents(session.registryUrl, session.token);
+      setAgents(data);
+      setSelected(data.find((a) => a.identifier !== deletedId) ?? null);
       setPanelMode("view");
-    } catch { /* refresh reflects actual state */ }
+    } catch { /* state reflects actual server state via next refresh */ }
     finally { setDeleting(false); }
   }
 

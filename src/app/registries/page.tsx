@@ -11,9 +11,8 @@ import type { IndexRecord, OrgStatus } from "@/lib/garr-types";
 
 export default function RegistriesPage() {
   const [statusFilter, setStatusFilter] = useState<OrgStatus | "all">("active");
-  const isLoggedIn = typeof window !== "undefined"
-    ? (() => { const t = getAuthToken(); return !!t && !isTokenExpired(t); })()
-    : false;
+  // Start false to match SSR; flip after mount to avoid hydration mismatch
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [items, setItems] = useState<IndexRecord[]>([]);
   const [selected, setSelected] = useState<IndexRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +36,11 @@ export default function RegistriesPage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    const t = getAuthToken();
+    setIsLoggedIn(!!t && !isTokenExpired(t));
+  }, []);
 
   useEffect(() => {
     load();
