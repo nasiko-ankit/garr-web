@@ -1,37 +1,20 @@
-export type RapProtocol = "a2a" | "mcp" | "rest" | "https";
-export type RapVisibility = "public" | "private";
-
-export interface RapAgent {
-  id: string;
+export interface RegistryAgentRecord {
+  agent_id: string;
   display_name: string;
-  description: string;
-  version: string;
-  capabilities: string[];
-  invocation_url: string;
-  protocol: RapProtocol;
-  visibility: RapVisibility;
-  signed_by: string;
+  description: string | null;
+  card_url: string;
+  tags: string[];
+  ttl_seconds: number;
+  status: "active" | "inactive";
   created_at: string;
   updated_at: string;
-  signature: string;
 }
 
-export interface RapCatalog {
-  owner_id: string;
-  domain: string;
-  generated_at: string;
-  catalog_version: number;
-  total: number;
-  agents: RapAgent[];
-}
-
-export interface AgentCreatePayload {
-  name: string;
+export interface RegistryAgentCreatePayload {
+  agent_id: string;
   display_name: string;
   description?: string;
-  version?: string;
-  capabilities: string[];
-  invocation_url: string;
-  protocol: string;
-  visibility?: RapVisibility;
+  card_url: string;
+  tags?: string[];
+  ttl_seconds?: number;
 }

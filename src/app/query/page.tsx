@@ -4,17 +4,12 @@ import { useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { JsonPanel } from "@/components/JsonPanel";
 import { TableEmptyState } from "@/components/TableEmptyState";
-import {
-  ApiError,
-  getRegistry,
-  resolveDomain,
-  searchRegistries,
-} from "@/lib/garr-api";
+import { ApiError, getIndexRecord, searchIndexRecords } from "@/lib/garr-api";
 
-type Mode = "registry" | "resolve" | "search";
+type Mode = "org_id" | "search";
 
 export default function QueryPage() {
-  const [mode, setMode] = useState<Mode>("registry");
+  const [mode, setMode] = useState<Mode>("org_id");
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<unknown>(null);
   const [latency, setLatency] = useState<number | null>(null);
@@ -31,15 +26,11 @@ export default function QueryPage() {
 
     try {
       let data: unknown;
-
-      if (mode === "registry") {
-        data = await getRegistry(query.trim());
-      } else if (mode === "resolve") {
-        data = await resolveDomain(query.trim());
+      if (mode === "org_id") {
+        data = await getIndexRecord(query.trim());
       } else {
-        data = await searchRegistries(query.trim());
+        data = await searchIndexRecords(query.trim());
       }
-
       setResult(data);
       setLatency(Math.round(performance.now() - start));
     } catch (err) {
@@ -53,14 +44,13 @@ export default function QueryPage() {
 
   return (
     <PageShell
-      title="Agent Query"
-      description="Look up a registry by owner ID, resolve a domain, or run a keyword search."
+      title="Index Query"
+      description="Look up an organization by org ID or search by keyword."
     >
       <form className="space-y-4 rounded-3xl border border-black/10 bg-white p-5 shadow-sm" onSubmit={runQuery}>
         <div className="flex flex-wrap gap-2">
           {[
-            ["registry", "Registry by Owner ID"],
-            ["resolve", "Resolve by Domain"],
+            ["org_id", "By Org ID"],
             ["search", "Keyword Search"],
           ].map(([key, label]) => (
             <button
@@ -82,10 +72,8 @@ export default function QueryPage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={
-              mode === "resolve" ? "google.com" : mode === "search" ? "nasiko" : "nasiko"
-            }
-            className="rounded-2xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300"
+            placeholder={mode === "org_id" ? "nasiko" : "keyword"}
+            className="rounded-2xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300 font-mono text-sm"
           />
           <button
             disabled={loading || !query.trim()}

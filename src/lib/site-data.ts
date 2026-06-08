@@ -1,10 +1,11 @@
 export const navigation = [
   { href: "/", label: "Overview" },
-  { href: "/register", label: "Register" },
   { href: "/registries", label: "Browse" },
   { href: "/resolve", label: "Resolve" },
   { href: "/query", label: "Agent Query" },
-  { href: "/rap", label: "RAP Manager" },
+  { href: "/registry", label: "Registry Manager" },
+  { href: "/login", label: "Login" },
+  { href: "/dashboard", label: "Dashboard" },
 ];
 
 export const heroStats = [

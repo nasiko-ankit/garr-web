@@ -1,20 +1,20 @@
-import type { AgentCreatePayload, RapAgent, RapCatalog } from "./rap-types";
+import type { RegistryAgentRecord, RegistryAgentCreatePayload } from "./rap-types";
 
-export class RapApiError extends Error {
+export class RegistryApiError extends Error {
   status: number;
   payload?: unknown;
 
   constructor(message: string, status: number, payload?: unknown) {
     super(message);
-    this.name = "RapApiError";
+    this.name = "RegistryApiError";
     this.status = status;
     this.payload = payload;
   }
 }
 
-async function rapRequest<T>(
+async function registryRequest<T>(
   baseUrl: string,
-  adminKey: string,
+  adminToken: string,
   path: string,
   init?: RequestInit
 ): Promise<T> {
@@ -23,7 +23,7 @@ async function rapRequest<T>(
     ...init,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${adminKey}`,
+      Authorization: `Bearer ${adminToken}`,
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
@@ -38,10 +38,8 @@ async function rapRequest<T>(
   }
 
   if (!res.ok) {
-    const obj =
-      data && typeof data === "object" ? (data as Record<string, unknown>) : {};
-    const errorCode =
-      typeof obj["error"] === "string" ? obj["error"] : null;
+    const obj = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const errorCode = typeof obj["error"] === "string" ? obj["error"] : null;
     const detail =
       typeof obj["detail"] === "string"
         ? obj["detail"]
@@ -52,68 +50,65 @@ async function rapRequest<T>(
       detail && errorCode
         ? `${errorCode} — ${detail}`
         : detail ?? errorCode ?? `Request failed with status ${res.status}`;
-    throw new RapApiError(message, res.status, data);
+    throw new RegistryApiError(message, res.status, data);
   }
 
   return data as T;
 }
 
-export async function rapFetchCatalog(
+export async function fetchRegistryAgents(
   baseUrl: string,
-  adminKey: string
-): Promise<RapCatalog> {
-  return rapRequest<RapCatalog>(baseUrl, adminKey, "/agents.json");
+  adminToken: string
+): Promise<RegistryAgentRecord[]> {
+  return registryRequest<RegistryAgentRecord[]>(baseUrl, adminToken, "/agents");
 }
 
-export async function rapGetAgent(
+export async function getRegistryAgent(
   baseUrl: string,
-  adminKey: string,
-  slug: string
-): Promise<RapAgent> {
-  return rapRequest<RapAgent>(
+  adminToken: string,
+  agentId: string
+): Promise<RegistryAgentRecord> {
+  return registryRequest<RegistryAgentRecord>(
     baseUrl,
-    adminKey,
-    `/agents/${encodeURIComponent(slug)}`
+    adminToken,
+    `/agents/${encodeURIComponent(agentId)}`
   );
 }
 
-export async function rapCreateAgent(
+export async function createRegistryAgent(
   baseUrl: string,
-  adminKey: string,
-  body: AgentCreatePayload
-): Promise<RapAgent> {
-  return rapRequest<RapAgent>(baseUrl, adminKey, "/agents", {
+  adminToken: string,
+  body: RegistryAgentCreatePayload
+): Promise<RegistryAgentRecord> {
+  return registryRequest<RegistryAgentRecord>(baseUrl, adminToken, "/agents", {
     method: "POST",
     body: JSON.stringify(body),
   });
 }
 
-export async function rapUpdateAgent(
+export async function updateRegistryAgent(
   baseUrl: string,
-  adminKey: string,
-  slug: string,
-  body: AgentCreatePayload
-): Promise<RapAgent> {
-  return rapRequest<RapAgent>(
+  adminToken: string,
+  agentId: string,
+  body: RegistryAgentCreatePayload
+): Promise<RegistryAgentRecord> {
+  return registryRequest<RegistryAgentRecord>(
     baseUrl,
-    adminKey,
-    `/agents/${encodeURIComponent(slug)}`,
-    {
-      method: "PUT",
-      body: JSON.stringify(body),
-    }
+    adminToken,
+    `/agents/${encodeURIComponent(agentId)}`,
+    { method: "PUT", body: JSON.stringify(body) }
   );
 }
 
-export async function rapDeleteAgent(
+export async function deleteRegistryAgent(
   baseUrl: string,
-  adminKey: string,
-  slug: string
+  adminToken: string,
+  agentId: string
 ): Promise<void> {
-  await rapRequest<null>(
+  await registryRequest<null>(
     baseUrl,
-    adminKey,
-    `/agents/${encodeURIComponent(slug)}`,
+    adminToken,
+    `/agents/${encodeURIComponent(agentId)}`,
     { method: "DELETE" }
   );
 }

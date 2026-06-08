@@ -1,10 +1,11 @@
+import { getAuthToken } from "./auth";
 import type {
-  EntityOwner,
-  EntityOwnerWire,
-  EntityStatus,
-  PendingChallengeResponse,
-  RegisterPayload,
+  IndexRecord,
+  CatalogEntry,
   ResolveResponse,
+  User,
+  CreateOrgPayload,
+  UpdateOrgPayload,
 } from "./garr-types";
 
 const API_BASE = process.env.NEXT_PUBLIC_GARR_API_BASE_URL ?? "";
@@ -21,11 +22,6 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Parses a Fetch Response and throws ApiError on non-2xx.
- * Handles GARR's `{ error, detail }` envelope — surfaces `detail` first
- * so the UI shows the why, not just the code.
- */
 async function parseApiResponse<T>(res: Response): Promise<T> {
   const text = await res.text();
   let data: unknown = null;
@@ -49,11 +45,17 @@ async function parseApiResponse<T>(res: Response): Promise<T> {
   return data as T;
 }
 
+function authHeaders(): Record<string, string> {
+  const token = typeof window !== "undefined" ? getAuthToken() : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders(),
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
@@ -61,135 +63,148 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return parseApiResponse<T>(res);
 }
 
-/** Maps a flat EntityOwnerWire from the backend into the nested EntityOwner shape used by the UI. */
-export function toEntityOwner(wire: EntityOwnerWire): EntityOwner {
-  return {
-    owner_id: wire.owner_id,
-    display_name: wire.display_name,
-    domain: wire.domain,
-    contact_email: wire.contact_email,
-    ttl_seconds: wire.ttl_seconds,
-    serial: wire.serial,
-    status: wire.status,
-    auth: {
-      algorithm: wire.algorithm,
-      public_key: wire.public_key,
-      key_id: wire.key_id,
-      // dmarc_policy is write-time only and never returned by read endpoints
-      dmarc_policy: "",
-    },
-    rap: {
-      url: wire.rap_url,
-      ...(wire.rap_fallback ? { fallback_url: wire.rap_fallback } : {}),
-      protocol: "https",
-    },
-    signature: {
-      signed_by: wire.signed_by,
-      value: wire.signature_value,
-      issued_at: wire.issued_at,
-      expires_at: wire.expires_at,
-    },
-  };
+/** GET /api/v1/index — list all active orgs. */
+export async function listIndexRecords(): Promise<IndexRecord[]> {
+  return request<IndexRecord[]>("/api/v1/index");
 }
 
-/** Step 1 of registration — POST /api/v1/register → 202 challenge nonce. */
-export async function registerOwner(
-  payload: RegisterPayload
-): Promise<PendingChallengeResponse> {
-  return request<PendingChallengeResponse>("/api/v1/register", {
+/** GET /api/v1/index/:org_id — single IndexRecord. */
+export async function getIndexRecord(orgId: string): Promise<IndexRecord> {
+  return request<IndexRecord>(`/api/v1/index/${encodeURIComponent(orgId)}`);
+}
+
+/** GET /api/v1/search?q= — search index records. */
+export async function searchIndexRecords(q: string): Promise<{ results: IndexRecord[] }> {
+  return request<{ results: IndexRecord[] }>(`/api/v1/search?q=${encodeURIComponent(q)}`);
+}
+
+/**
+ * GET /api/v1/resolve?locator=<agent>@<domain>:global
+ * Returns identifier + IndexRecord from the NANDA Index.
+ * The caller fetches the AgentRecord directly: GET <index_record.registry_url>/agents/<identifier>
+ */
+export async function resolveAgent(locator: string): Promise<ResolveResponse> {
+  return request<ResolveResponse>(`/api/v1/resolve?locator=${encodeURIComponent(locator)}`);
+}
+
+/** Fetch a single CatalogEntry from a Registry Server (hop 2). */
+export async function fetchAgentRecord(registryUrl: string, agentId: string): Promise<CatalogEntry> {
+  const url = `${registryUrl.replace(/\/+$/, "")}/agents/${encodeURIComponent(agentId)}`;
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  return parseApiResponse<CatalogEntry>(res);
+}
+
+/** POST /auth/register — create account with email + password. Returns JWT. */
+export async function registerWithPassword(
+  email: string,
+  password: string,
+  displayName?: string,
+): Promise<string> {
+  const res = await request<{ token: string }>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email, password, display_name: displayName }),
+  });
+  return res.token;
+}
+
+/** POST /auth/login — sign in with email + password. Returns JWT. */
+export async function loginWithPassword(email: string, password: string): Promise<string> {
+  const res = await request<{ token: string }>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  return res.token;
+}
+
+/** GET /api/v1/me — authenticated user profile + org memberships. */
+export async function getMe(): Promise<User> {
+  return request<User>("/api/v1/me");
+}
+
+/** POST /api/v1/orgs — create an org (requires auth). */
+export async function createOrg(payload: CreateOrgPayload): Promise<IndexRecord> {
+  return request<IndexRecord>("/api/v1/orgs", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-/** Step 2 of registration — POST /api/v1/register/:owner_id/verify → 201 EntityOwner. */
-export async function verifyOwner(
-  ownerId: string,
-  challengeSignature: string
-): Promise<EntityOwner> {
-  const wire = await request<EntityOwnerWire>(
-    `/api/v1/register/${encodeURIComponent(ownerId)}/verify`,
-    {
-      method: "POST",
-      body: JSON.stringify({ challenge_signature: challengeSignature }),
-    }
-  );
-  return toEntityOwner(wire);
+/** PUT /api/v1/orgs/:org_id — update an org (requires auth). */
+export async function updateOrg(orgId: string, payload: UpdateOrgPayload): Promise<IndexRecord> {
+  return request<IndexRecord>(`/api/v1/orgs/${encodeURIComponent(orgId)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
 }
 
-/** GET /api/v1/owners/:owner_id → EntityOwner. */
-export async function getRegistry(ownerId: string): Promise<EntityOwner> {
-  const wire = await request<EntityOwnerWire>(
-    `/api/v1/owners/${encodeURIComponent(ownerId)}`
-  );
-  return toEntityOwner(wire);
+/** DELETE /api/v1/orgs/:org_id — suspend an org (requires auth). */
+export async function deleteOrg(orgId: string): Promise<IndexRecord> {
+  return request<IndexRecord>(`/api/v1/orgs/${encodeURIComponent(orgId)}`, {
+    method: "DELETE",
+  });
 }
 
-/** GET /api/v1/search?q= → EntityOwner[]. */
-export async function searchRegistries(q: string): Promise<EntityOwner[]> {
-  const res = await request<{ results: EntityOwnerWire[] }>(
-    `/api/v1/search?q=${encodeURIComponent(q)}`
-  );
-  return (res.results ?? []).map(toEntityOwner);
+/** GET /api/v1/orgs/:org_id — get own org (requires auth + membership). */
+export async function getOrgAsOwner(orgId: string): Promise<IndexRecord> {
+  return request<IndexRecord>(`/api/v1/orgs/${encodeURIComponent(orgId)}`);
 }
 
-/**
- * Resolve a domain by searching for it and returning the first match.
- * Throws ApiError(404) if no match is found.
- *
- * NOTE: uses the search endpoint as a proxy — if the backend paginates and
- * the exact domain falls outside the first page, this will incorrectly 404.
- * A dedicated GET /api/v1/owners?domain= endpoint would fix this properly.
- */
-export async function resolveDomain(domain: string): Promise<EntityOwner> {
-  const needle = domain.trim().toLowerCase();
-  const res = await request<{ results: EntityOwnerWire[] }>(
-    `/api/v1/search?q=${encodeURIComponent(needle)}`
-  );
-  const match = (res.results ?? []).find(
-    (r) => r.domain.toLowerCase() === needle
-  );
-  if (!match) {
-    throw new ApiError("not_found", 404);
-  }
-  return toEntityOwner(match);
+export interface CreateAgentPayload {
+  agent_id: string;
+  display_name: string;
+  url: string;
+  media_type?: string;
+  description?: string;
+  tags?: string[];
+  version?: string;
+  ttl_seconds?: number;
 }
 
-/**
- * List all active owners by fetching the root manifest and extracting entity_owners.
- * Optionally filter by status. Uses option C (§manifest) — zero backend changes required.
- */
-export async function listRegistries(
-  status?: EntityStatus | "all"
-): Promise<EntityOwner[]> {
-  const manifest = await request<{ entity_owners: EntityOwnerWire[] }>(
-    "/global_agent_root.json"
-  );
-  const wires = manifest.entity_owners ?? [];
-  const filtered =
-    !status || status === "all"
-      ? wires
-      : wires.filter((w) => w.status === status);
-  return filtered.map(toEntityOwner);
+/** POST /agents on a Registry Server — requires admin token. */
+export async function createRegistryAgent(
+  registryUrl: string,
+  adminToken: string,
+  payload: CreateAgentPayload,
+): Promise<CatalogEntry> {
+  const base = registryUrl.replace(/\/+$/, "");
+  const res = await fetch(`${base}/agents`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${adminToken}`,
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  return parseApiResponse<CatalogEntry>(res);
 }
 
-/** GET /global_agent_root.json — the signed root manifest. */
-export async function getManifest(): Promise<unknown> {
-  return request<unknown>("/global_agent_root.json");
+/** GET /agents on a Registry Server — returns full CatalogDocument. */
+export async function listRegistryAgents(
+  registryUrl: string,
+): Promise<import("./garr-types").CatalogDocument> {
+  const base = registryUrl.replace(/\/+$/, "");
+  const res = await fetch(`${base}/agents`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  return parseApiResponse(res);
 }
 
-/**
- * GET /api/v1/resolve?locator=<agent>@<domain>:<mode>
- * Returns a fully verified AgentCard + IndexRecord (Layer 3 resolution).
- *
- * Locator format: agent@domain:mode
- *   mode = global | dnssrv | nandaindex.org
- *
- * Example: scheduler@nasiko.com:global
- */
-export async function resolveAgent(locator: string): Promise<ResolveResponse> {
-  return request<ResolveResponse>(
-    `/api/v1/resolve?locator=${encodeURIComponent(locator)}`
-  );
+/** Fetch the agent facts document at hop 3 URL — may fail on CORS for external hosts. */
+export async function fetchFactsUrl(url: string): Promise<unknown> {
+  const res = await fetch(url, {
+    headers: { Accept: "application/json, */*" },
+    cache: "no-store",
+  });
+  return parseApiResponse(res);
 }
 
+/** @deprecated Use listIndexRecords. Kept for backwards compat during migration. */
+export async function searchRegistries(q: string): Promise<IndexRecord[]> {
+  const res = await searchIndexRecords(q);
+  return res.results ?? [];
+}

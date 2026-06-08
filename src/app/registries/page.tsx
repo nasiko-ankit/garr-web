@@ -5,27 +5,28 @@ import { PageShell } from "@/components/PageShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { JsonPanel } from "@/components/JsonPanel";
 import { TableEmptyState } from "@/components/TableEmptyState";
-import { ApiError, listRegistries } from "@/lib/garr-api";
-import type { EntityOwner, EntityStatus } from "@/lib/garr-types";
+import { ApiError, listIndexRecords } from "@/lib/garr-api";
+import type { IndexRecord, OrgStatus } from "@/lib/garr-types";
 
 export default function RegistriesPage() {
-  const [status, setStatus] = useState<EntityStatus | "all">("all");
-  const [items, setItems] = useState<EntityOwner[]>([]);
-  const [selected, setSelected] = useState<EntityOwner | null>(null);
+  const [statusFilter, setStatusFilter] = useState<OrgStatus | "all">("active");
+  const [items, setItems] = useState<IndexRecord[]>([]);
+  const [selected, setSelected] = useState<IndexRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(nextStatus: typeof status) {
+  async function load() {
     setLoading(true);
     setError(null);
 
     try {
-      const data = await listRegistries(nextStatus);
-      setItems(data);
-      setSelected(data[0] ?? null);
+      const data = await listIndexRecords();
+      const filtered = statusFilter === "all" ? data : data.filter((r) => r.status === statusFilter);
+      setItems(filtered);
+      setSelected(filtered[0] ?? null);
     } catch (err) {
       if (err instanceof ApiError) setError(`${err.status}: ${err.message}`);
-      else setError("Could not load registries.");
+      else setError("Could not load index records.");
       setItems([]);
       setSelected(null);
     } finally {
@@ -34,22 +35,22 @@ export default function RegistriesPage() {
   }
 
   useEffect(() => {
-    load(status);
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [statusFilter]);
 
   return (
     <PageShell
-      title="Browse Registries"
-      description="Browse all registered organizations in the global registry."
+      title="Browse Organizations"
+      description="All organizations registered in the NANDA Index."
     >
       <div className="mb-4 flex flex-wrap gap-2">
-        {(["all", "active", "stale", "pending", "suspended"] as const).map((s) => (
+        {(["active", "all", "pending", "suspended"] as const).map((s) => (
           <button
             key={s}
-            onClick={() => setStatus(s)}
+            onClick={() => setStatusFilter(s)}
             className={`rounded-full border px-4 py-2 text-sm capitalize ${
-              status === s
+              statusFilter === s
                 ? "border-slate-950 bg-slate-950 text-white"
                 : "border-black/10 bg-white"
             }`}
@@ -61,7 +62,7 @@ export default function RegistriesPage() {
 
       {loading ? (
         <div className="rounded-3xl border border-black/10 bg-white p-6 shadow-sm">
-          Loading registries...
+          Loading…
         </div>
       ) : error ? (
         <div className="mb-6 rounded-3xl border border-rose-200 bg-rose-50 p-4 text-rose-700">
@@ -69,43 +70,46 @@ export default function RegistriesPage() {
         </div>
       ) : items.length === 0 ? (
         <TableEmptyState
-          title="No registries found"
-          description="There are no matching registries for the selected filter."
-          actionLabel="Register one"
-          actionHref="/register"
+          title="No organizations found"
+          description="No organizations match the selected filter."
+          actionLabel="Sign in to register"
+          actionHref="/login"
         />
       ) : (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
           <div className="overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm">
             <table className="w-full table-fixed text-left">
               <colgroup>
-                <col style={{ width: "40%" }} />
-                <col style={{ width: "40%" }} />
-                <col style={{ width: "20%" }} />
+                <col style={{ width: "35%" }} />
+                <col style={{ width: "35%" }} />
+                <col style={{ width: "15%" }} />
+                <col style={{ width: "15%" }} />
               </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-[0.18em] text-slate-500">
                 <tr>
-                  <th className="px-4 py-4">Owner</th>
+                  <th className="px-4 py-4">Organization</th>
                   <th className="px-4 py-4">Domain</th>
                   <th className="px-4 py-4">Status</th>
+                  <th className="px-4 py-4">Verified</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item) => (
                   <tr
-                    key={item.owner_id}
+                    key={item.org_id}
                     onClick={() => setSelected(item)}
                     className="cursor-pointer border-t hover:bg-slate-50"
                   >
                     <td className="px-4 py-4 align-top">
-                      <div className="font-medium text-slate-950 break-words">
-                        {item.display_name}
-                      </div>
-                      <div className="text-sm text-slate-500 break-all">{item.owner_id}</div>
+                      <div className="font-medium text-slate-950 break-words">{item.display_name}</div>
+                      <div className="text-sm text-slate-500 break-all">{item.org_id}</div>
                     </td>
                     <td className="px-4 py-4 align-top break-all">{item.domain}</td>
                     <td className="px-4 py-4 align-top">
                       <StatusBadge status={item.status} />
+                    </td>
+                    <td className="px-4 py-4 align-top text-sm">
+                      {item.email_verified ? "✓" : "—"}
                     </td>
                   </tr>
                 ))}
@@ -121,15 +125,26 @@ export default function RegistriesPage() {
                   <p className="mt-1 text-sm text-slate-500">{selected.domain}</p>
                   <div className="mt-4 grid gap-2 text-sm text-slate-700">
                     <div>
-                      <span className="font-medium">Signed by:</span>{" "}
-                      {selected.signature.signed_by}
+                      <span className="font-medium">Registry URL:</span>{" "}
+                      <a
+                        href={selected.registry_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="break-all font-mono text-xs text-indigo-600 hover:underline"
+                      >
+                        {selected.registry_url}
+                      </a>
                     </div>
                     <div>
-                      <span className="font-medium">Expires:</span>{" "}
-                      {selected.signature.expires_at}
+                      <span className="font-medium">TTL:</span> {selected.ttl_seconds}s
                     </div>
                     <div>
-                      <span className="font-medium">Serial:</span> {selected.serial}
+                      <span className="font-medium">Email verified:</span>{" "}
+                      {selected.email_verified ? "Yes" : "No"}
+                    </div>
+                    <div>
+                      <span className="font-medium">Created:</span>{" "}
+                      {new Date(selected.created_at).toLocaleDateString()}
                     </div>
                   </div>
                 </div>

@@ -4,898 +4,684 @@ import { useCallback, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { JsonPanel } from "@/components/JsonPanel";
 import { cn } from "@/lib/utils";
-import { ProtocolBadge, VisibilityBadge } from "@/components/AgentBadges";
-import type { RapAgent, RapCatalog, RapProtocol, RapVisibility } from "@/lib/rap-types";
+import type { RegistryAgentRecord, RegistryAgentCreatePayload } from "@/lib/rap-types";
 import {
-  RapApiError,
-  rapCreateAgent,
-  rapDeleteAgent,
-  rapFetchCatalog,
-  rapUpdateAgent,
+  RegistryApiError,
+  createRegistryAgent,
+  deleteRegistryAgent,
+  fetchRegistryAgents,
+  updateRegistryAgent,
 } from "@/lib/rap-api";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type ConnectState = "idle" | "connecting" | "connected";
 type PanelMode = "view" | "create" | "edit";
-type VisibilityFilter = "all" | "public" | "private";
 
 interface FormState {
-  name: string;
+  agent_id: string;
   display_name: string;
   description: string;
-  version: string;
-  capabilities: string;
-  invocation_url: string;
-  protocol: RapProtocol;
-  visibility: RapVisibility;
+  card_url: string;
+  tags: string[];
+  ttl_seconds: string;
 }
 
 const EMPTY_FORM: FormState = {
-  name: "",
+  agent_id:     "",
   display_name: "",
-  description: "",
-  version: "1.0.0",
-  capabilities: "",
-  invocation_url: "",
-  protocol: "a2a",
-  visibility: "public",
+  description:  "",
+  card_url:     "",
+  tags:         [],
+  ttl_seconds:  "3600",
 };
 
-function agentToForm(agent: RapAgent): FormState {
+function agentToForm(agent: RegistryAgentRecord): FormState {
   return {
-    name: agent.id.split("@")[0],
+    agent_id:     agent.agent_id,
     display_name: agent.display_name,
-    description: agent.description,
-    version: agent.version,
-    capabilities: agent.capabilities.join(", "),
-    invocation_url: agent.invocation_url,
-    protocol: agent.protocol,
-    visibility: agent.visibility,
+    description:  agent.description ?? "",
+    card_url:     agent.card_url,
+    tags:         agent.tags,
+    ttl_seconds:  String(agent.ttl_seconds),
   };
 }
 
-function slugFromId(id: string) {
-  return id.split("@")[0];
-}
-
-
-// ── Form field components ─────────────────────────────────────────────────────
+// ── Field ─────────────────────────────────────────────────────────────────────
 
 function Field({
   label,
   value,
   onChange,
   placeholder,
-  disabled = false,
   type = "text",
+  disabled = false,
   hint,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
-  disabled?: boolean;
   type?: string;
+  disabled?: boolean;
   hint?: string;
+  error?: string;
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
+      <span className="mb-1 block text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </span>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-70"
+        className={cn(
+          "w-full rounded-2xl border px-4 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-slate-300 bg-white disabled:cursor-not-allowed disabled:opacity-50",
+          error ? "border-rose-300 bg-rose-50/40" : "border-black/10",
+        )}
       />
-      {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
-    </label>
-  );
-}
-
-function SelectField({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-// ── Agent detail panel ────────────────────────────────────────────────────────
-
-function AgentDetail({
-  agent,
-  onEdit,
-  onDeleteRequest,
-  deleteConfirm,
-  onDeleteConfirm,
-  onDeleteCancel,
-  submitting,
-}: {
-  agent: RapAgent;
-  onEdit: () => void;
-  onDeleteRequest: () => void;
-  deleteConfirm: boolean;
-  onDeleteConfirm: () => void;
-  onDeleteCancel: () => void;
-  submitting: boolean;
-}) {
-  return (
-    <div className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-xl font-semibold text-slate-950 break-words">
-            {agent.display_name}
-          </h2>
-          <p className="mt-0.5 text-xs font-mono text-slate-500 break-all">{agent.id}</p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <VisibilityBadge visibility={agent.visibility} />
-          <ProtocolBadge protocol={agent.protocol} />
-        </div>
-      </div>
-
-      {agent.description ? (
-        <p className="text-sm leading-6 text-slate-600">{agent.description}</p>
+      {error ? (
+        <p className="mt-1 text-[11px] text-rose-500">{error}</p>
+      ) : hint ? (
+        <p className="mt-1 text-[11px] text-slate-400">{hint}</p>
       ) : null}
+    </label>
+  );
+}
 
-      <div className="grid gap-2 text-sm text-slate-700">
-        <div>
-          <span className="font-medium">Version:</span>{" "}
-          <span className="font-mono text-xs">{agent.version}</span>
-        </div>
-        <div>
-          <span className="font-medium">Invocation URL:</span>{" "}
-          <a
-            href={agent.invocation_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="break-all text-xs font-mono text-indigo-600 underline-offset-2 hover:underline"
+// ── Tags chip input ───────────────────────────────────────────────────────────
+
+function TagsInput({
+  tags,
+  onChange,
+}: {
+  tags: string[];
+  onChange: (tags: string[]) => void;
+}) {
+  const [input, setInput] = useState("");
+
+  function commit(raw: string) {
+    const tag = raw.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+    if (tag && !tags.includes(tag)) onChange([...tags, tag]);
+    setInput("");
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      commit(input);
+    } else if (e.key === "Backspace" && !input && tags.length > 0) {
+      onChange(tags.slice(0, -1));
+    }
+  }
+
+  return (
+    <div>
+      <span className="mb-1 block text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+        Tags
+      </span>
+      <div className="flex min-h-[42px] flex-wrap gap-1.5 rounded-2xl border border-black/10 bg-white px-3 py-2 focus-within:ring-2 focus-within:ring-slate-300">
+        {tags.map((tag) => (
+          <span
+            key={tag}
+            className="flex items-center gap-1 rounded-full border border-black/10 bg-slate-100 px-2.5 py-0.5 font-mono text-xs text-slate-700"
           >
-            {agent.invocation_url}
-          </a>
-        </div>
-        <div>
-          <span className="font-medium">Signed by:</span>{" "}
-          <span className="font-mono text-xs">{agent.signed_by}</span>
-        </div>
-        <div>
-          <span className="font-medium">Created:</span>{" "}
-          <span className="text-slate-600">
-            {new Date(agent.created_at).toLocaleString()}
-          </span>
-        </div>
-        <div>
-          <span className="font-medium">Updated:</span>{" "}
-          <span className="text-slate-600">
-            {new Date(agent.updated_at).toLocaleString()}
-          </span>
-        </div>
-      </div>
-
-      <div>
-        <p className="mb-2 text-sm font-medium text-slate-700">
-          Capabilities{" "}
-          <span className="font-normal text-slate-400">
-            ({agent.capabilities.length})
-          </span>
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {agent.capabilities.map((cap) => (
-            <span
-              key={cap}
-              className="rounded-full border border-black/10 bg-slate-50 px-2.5 py-1 text-xs font-mono text-slate-700"
+            {tag}
+            <button
+              type="button"
+              onClick={() => onChange(tags.filter((t) => t !== tag))}
+              className="ml-0.5 leading-none text-slate-400 hover:text-slate-900"
+              aria-label={`Remove tag ${tag}`}
             >
-              {cap}
+              ×
+            </button>
+          </span>
+        ))}
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={onKeyDown}
+          onBlur={() => { if (input) commit(input); }}
+          placeholder={tags.length === 0 ? "e.g. customer-service, billing" : ""}
+          className="min-w-[160px] flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-slate-300"
+        />
+      </div>
+      <p className="mt-1 text-[11px] text-slate-400">
+        Press Enter or comma to add. Backspace to remove last.
+      </p>
+    </div>
+  );
+}
+
+// ── Agent card ────────────────────────────────────────────────────────────────
+
+function AgentCard({
+  agent,
+  selected,
+  onClick,
+}: {
+  agent: RegistryAgentRecord;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full rounded-2xl border p-4 text-left transition",
+        selected
+          ? "border-slate-950 bg-slate-50 shadow-sm"
+          : "border-black/10 bg-white hover:bg-slate-50",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate font-medium text-slate-950">{agent.display_name}</span>
+        <span
+          className={cn(
+            "shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.15em]",
+            agent.status === "active"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-slate-200 bg-slate-50 text-slate-500",
+          )}
+        >
+          {agent.status}
+        </span>
+      </div>
+      <p className="mt-1 truncate font-mono text-xs text-slate-500">{agent.agent_id}</p>
+      {agent.tags.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {agent.tags.slice(0, 3).map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full border border-black/8 bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-500"
+            >
+              {tag}
             </span>
           ))}
+          {agent.tags.length > 3 && (
+            <span className="font-mono text-[10px] text-slate-400">
+              +{agent.tags.length - 3}
+            </span>
+          )}
         </div>
-      </div>
+      )}
+    </button>
+  );
+}
 
-      <div className="border-t border-black/5 pt-4">
-        <p className="mb-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-          Signature
-        </p>
-        <p className="break-all font-mono text-[11px] text-slate-400">
-          {agent.signature.slice(0, 64)}…
-        </p>
-      </div>
+// ── Connect screen ────────────────────────────────────────────────────────────
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-black/5 pt-4">
-        <button
-          onClick={onEdit}
-          className="rounded-xl border border-black/10 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-        >
-          Edit
-        </button>
+function ConnectScreen({
+  registryUrl,
+  setRegistryUrl,
+  adminToken,
+  setAdminToken,
+  onConnect,
+  connectState,
+  connectError,
+}: {
+  registryUrl: string;
+  setRegistryUrl: (v: string) => void;
+  adminToken: string;
+  setAdminToken: (v: string) => void;
+  onConnect: () => void;
+  connectState: ConnectState;
+  connectError: string | null;
+}) {
+  return (
+    <div className="mx-auto max-w-lg space-y-5">
+      <div className="rounded-3xl border border-black/10 bg-white p-6 shadow-sm space-y-5">
+        <div>
+          <h2 className="font-serif text-xl italic text-slate-950">Connect to your registry</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Registry Manager lets you add, edit, and remove agent records on any Registry Server you control.
+          </p>
+        </div>
 
-        {!deleteConfirm ? (
-          <button
-            onClick={onDeleteRequest}
-            className="rounded-xl border border-rose-200 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50"
-          >
-            Delete
-          </button>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5">
-            <span className="text-sm text-rose-700">Delete this agent?</span>
-            <button
-              onClick={onDeleteConfirm}
-              disabled={submitting}
-              className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-60"
-            >
-              {submitting ? "Deleting…" : "Yes, delete"}
-            </button>
-            <button
-              onClick={onDeleteCancel}
-              className="rounded-lg border border-rose-200 bg-white px-3 py-1 text-xs text-rose-700"
-            >
-              Cancel
-            </button>
+        <Field
+          label="Registry Server URL"
+          value={registryUrl}
+          onChange={setRegistryUrl}
+          placeholder="https://registry.nasiko.com"
+          hint="The base URL of your running Registry Server."
+        />
+        <Field
+          label="Admin Token"
+          value={adminToken}
+          onChange={setAdminToken}
+          placeholder="your-admin-token"
+          type="password"
+          hint="Set as REGISTRY_ADMIN_TOKEN in your Registry Server's environment."
+        />
+
+        {connectError && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {connectError}
           </div>
         )}
+
+        <button
+          onClick={onConnect}
+          disabled={connectState === "connecting" || !registryUrl || !adminToken}
+          className="rounded-2xl bg-slate-950 px-6 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {connectState === "connecting" ? "Connecting…" : "Connect"}
+        </button>
+      </div>
+
+      <div className="rounded-2xl border border-black/5 bg-slate-50 px-5 py-4 text-xs text-slate-500">
+        <p className="font-semibold text-slate-700">Don&#39;t have a Registry Server yet?</p>
+        <p className="mt-1">
+          Deploy the <span className="font-mono">registry-server</span> from the GARR repo and set{" "}
+          <span className="font-mono">REGISTRY_ADMIN_TOKEN</span> in its environment. Then register
+          your org in the{" "}
+          <a href="/dashboard/orgs/new" className="text-indigo-600 hover:underline">
+            NANDA Index
+          </a>{" "}
+          pointing to it.
+        </p>
       </div>
     </div>
   );
 }
 
-// ── Agent create / edit form ──────────────────────────────────────────────────
+// ── Agent form (create / edit) ────────────────────────────────────────────────
 
 function AgentForm({
   mode,
   form,
-  setForm,
-  onSubmit,
+  patchForm,
+  onSave,
   onCancel,
-  submitting,
-  error,
+  saving,
+  saveError,
 }: {
   mode: "create" | "edit";
   form: FormState;
-  setForm: React.Dispatch<React.SetStateAction<FormState>>;
-  onSubmit: (e: React.FormEvent) => void;
+  patchForm: (key: keyof FormState, val: string | string[]) => void;
+  onSave: () => void;
   onCancel: () => void;
-  submitting: boolean;
-  error: string | null;
+  saving: boolean;
+  saveError: string | null;
 }) {
-  function update<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }
-
   return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm space-y-4"
-    >
+    <div className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm space-y-4">
       <h2 className="text-lg font-semibold text-slate-950">
-        {mode === "create" ? "Register Agent" : "Edit Agent"}
+        {mode === "create" ? "New agent" : `Edit ${form.agent_id}`}
       </h2>
 
       <Field
-        label="Agent Name (slug)"
-        value={form.name}
-        onChange={(v) => update("name", v)}
-        placeholder="billing-agent"
+        label="Agent ID"
+        value={form.agent_id}
+        onChange={(v) => patchForm("agent_id", v)}
+        placeholder="my-agent"
         disabled={mode === "edit"}
         hint={
-          mode === "create"
-            ? "Lowercase letters, digits, and hyphens only. e.g. scheduler, billing-agent."
-            : "Slug cannot be changed after creation."
+          mode === "edit"
+            ? "Agent ID cannot be changed after creation."
+            : "Lowercase letters, numbers, and hyphens. Permanent."
         }
       />
 
       <Field
         label="Display Name"
         value={form.display_name}
-        onChange={(v) => update("display_name", v)}
-        placeholder="Billing Agent"
+        onChange={(v) => patchForm("display_name", v)}
+        placeholder="My Agent"
       />
-
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium text-slate-700">
-          Description{" "}
-          <span className="font-normal text-slate-400">(optional)</span>
-        </span>
-        <textarea
-          rows={2}
-          value={form.description}
-          onChange={(e) => update("description", e.target.value)}
-          placeholder="Processes invoices and manages billing operations."
-          className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-300"
-        />
-      </label>
 
       <Field
-        label="Version"
-        value={form.version}
-        onChange={(v) => update("version", v)}
-        placeholder="1.0.0"
+        label="Description (optional)"
+        value={form.description}
+        onChange={(v) => patchForm("description", v)}
+        placeholder="What this agent does"
       />
-
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium text-slate-700">
-          Capabilities
-        </span>
-        <textarea
-          rows={3}
-          value={form.capabilities}
-          onChange={(e) => update("capabilities", e.target.value)}
-          placeholder="billing.invoice.create, billing.invoice.read, billing.payment.process"
-          className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-xs outline-none focus:ring-2 focus:ring-slate-300"
-        />
-        <p className="mt-1 text-xs text-slate-500">
-          Comma-separated capability strings.
-        </p>
-      </label>
 
       <Field
-        label="Invocation URL"
-        value={form.invocation_url}
-        onChange={(v) => update("invocation_url", v)}
-        placeholder="https://api.example.com/agents/billing"
-        hint="Must start with https://"
+        label="Card URL"
+        value={form.card_url}
+        onChange={(v) => patchForm("card_url", v)}
+        placeholder="https://agents.example.com/my-agent/a2a.json"
+        hint="URL to the A2A card JSON that describes this agent's capabilities."
       />
 
-      <SelectField
-        label="Protocol"
-        value={form.protocol}
-        onChange={(v) => update("protocol", v as RapProtocol)}
-        options={[
-          { value: "a2a", label: "a2a — Agent-to-Agent" },
-          { value: "mcp", label: "mcp — Model Context Protocol" },
-          { value: "rest", label: "rest — REST API" },
-          { value: "https", label: "https — Generic HTTPS" },
-        ]}
+      <TagsInput
+        tags={form.tags}
+        onChange={(tags) => patchForm("tags", tags)}
       />
 
-      <SelectField
-        label="Visibility"
-        value={form.visibility}
-        onChange={(v) => update("visibility", v as RapVisibility)}
-        options={[
-          { value: "public", label: "public — Listed without authentication" },
-          { value: "private", label: "private — Requires admin key to fetch" },
-        ]}
+      <Field
+        label="TTL Seconds"
+        value={form.ttl_seconds}
+        onChange={(v) => patchForm("ttl_seconds", v)}
+        placeholder="3600"
+        hint="How long resolvers should cache this agent record. Default: 3600 (1 hour)."
       />
 
-      {error && (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          {error}
+      {form.agent_id && form.card_url && (
+        <div className="rounded-2xl border border-black/5 bg-slate-50 px-4 py-3">
+          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
+            Card URL
+          </p>
+          <a
+            href={form.card_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 block break-all font-mono text-xs text-indigo-600 hover:underline"
+          >
+            {form.card_url}
+          </a>
         </div>
       )}
 
-      <div className="flex gap-3 border-t border-black/5 pt-2">
+      {saveError && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {saveError}
+        </div>
+      )}
+
+      <div className="flex gap-3">
         <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+          onClick={onSave}
+          disabled={saving}
+          className="rounded-2xl bg-slate-950 px-6 py-2.5 text-sm font-medium text-white disabled:opacity-60"
         >
-          {submitting
-            ? mode === "create"
-              ? "Registering…"
-              : "Saving…"
-            : mode === "create"
-            ? "Register agent"
-            : "Save changes"}
+          {saving ? "Saving…" : mode === "create" ? "Create agent" : "Save changes"}
         </button>
         <button
-          type="button"
           onClick={onCancel}
-          className="rounded-2xl border border-black/10 px-5 py-3 text-sm text-slate-700"
+          className="rounded-2xl border border-black/10 bg-white px-6 py-2.5 text-sm font-medium text-slate-700"
         >
           Cancel
         </button>
       </div>
-    </form>
+    </div>
   );
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function RapManagerPage() {
-  // Connection
+export default function RegistryManagerPage() {
+  const [registryUrl, setRegistryUrl] = useState("");
+  const [adminToken, setAdminToken] = useState("");
   const [connectState, setConnectState] = useState<ConnectState>("idle");
-  const [rapUrl, setRapUrl] = useState("");
-  const [adminKey, setAdminKey] = useState("");
-  const [catalog, setCatalog] = useState<RapCatalog | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
 
-  // List state
-  const [filter, setFilter] = useState<VisibilityFilter>("all");
-  const [selected, setSelected] = useState<RapAgent | null>(null);
+  const [agents, setAgents] = useState<RegistryAgentRecord[]>([]);
+  const [selected, setSelected] = useState<RegistryAgentRecord | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>("view");
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  // Action state
-  const [submitting, setSubmitting] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const patchForm = (key: keyof FormState, val: string | string[]) =>
+    setForm((f) => ({ ...f, [key]: val }));
 
-  const agents = catalog?.agents ?? [];
-  const filtered =
-    filter === "all" ? agents : agents.filter((a) => a.visibility === filter);
-
-  // ── Connection handlers ───────────────────────────────────────────────────
-
-  async function connect(e: React.FormEvent) {
-    e.preventDefault();
-    if (!rapUrl.trim() || !adminKey.trim()) return;
+  const connect = useCallback(async () => {
     setConnectState("connecting");
     setConnectError(null);
     try {
-      const data = await rapFetchCatalog(rapUrl.trim(), adminKey.trim());
-      setCatalog(data);
+      const data = await fetchRegistryAgents(registryUrl, adminToken);
+      setAgents(data);
+      setSelected(data[0] ?? null);
       setConnectState("connected");
     } catch (err) {
+      setConnectError(err instanceof RegistryApiError ? err.message : "Could not connect.");
       setConnectState("idle");
-      if (err instanceof RapApiError) {
-        setConnectError(`${err.status}: ${err.message}`);
-      } else {
-        setConnectError(
-          "Could not reach the RAP — check the URL and admin key, then try again."
-        );
-      }
     }
-  }
+  }, [registryUrl, adminToken]);
 
-  const refresh = useCallback(
-    async (currentSelected?: RapAgent | null) => {
-      setRefreshing(true);
-      setActionError(null);
-      try {
-        const data = await rapFetchCatalog(rapUrl, adminKey);
-        setCatalog(data);
-        const sel = currentSelected ?? selected;
-        if (sel) {
-          const refreshed = data.agents.find((a) => a.id === sel.id);
-          setSelected(refreshed ?? null);
-        }
-        return data;
-      } catch (err) {
-        if (err instanceof RapApiError)
-          setActionError(`Refresh failed: ${err.message}`);
-        else setActionError("Refresh failed.");
-        return null;
-      } finally {
-        setRefreshing(false);
-      }
-    },
-    [rapUrl, adminKey, selected]
-  );
+  const refresh = useCallback(async () => {
+    try {
+      const data = await fetchRegistryAgents(registryUrl, adminToken);
+      setAgents(data);
+    } catch {
+      // Silently fail on background refresh
+    }
+  }, [registryUrl, adminToken]);
 
-  function disconnect() {
-    setCatalog(null);
-    setConnectState("idle");
-    setAdminKey("");
-    setSelected(null);
-    setPanelMode("view");
-    setDeleteConfirm(false);
-    setActionError(null);
-    setConnectError(null);
-  }
-
-  // ── Panel handlers ────────────────────────────────────────────────────────
-
-  function openCreate() {
+  function startCreate() {
     setForm(EMPTY_FORM);
+    setSelected(null);
+    setSaveError(null);
     setPanelMode("create");
-    setDeleteConfirm(false);
-    setActionError(null);
   }
 
-  function openEdit(agent: RapAgent) {
-    setForm(agentToForm(agent));
+  function startEdit() {
+    if (!selected) return;
+    setForm(agentToForm(selected));
+    setSaveError(null);
     setPanelMode("edit");
-    setDeleteConfirm(false);
-    setActionError(null);
   }
 
-  function cancelForm() {
-    setPanelMode("view");
-    setActionError(null);
+  function formToPayload(): RegistryAgentCreatePayload {
+    return {
+      agent_id:     form.agent_id,
+      display_name: form.display_name,
+      description:  form.description || undefined,
+      card_url:     form.card_url,
+      tags:         form.tags,
+      ttl_seconds:  parseInt(form.ttl_seconds, 10) || 3600,
+    };
   }
 
-  // ── CRUD actions ──────────────────────────────────────────────────────────
-
-  async function submitCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    setActionError(null);
+  async function save() {
+    setSaving(true);
+    setSaveError(null);
     try {
-      const caps = form.capabilities
-        .split(/[,\n]/)
-        .map((c) => c.trim())
-        .filter(Boolean);
-      const agent = await rapCreateAgent(rapUrl, adminKey, {
-        name: form.name.trim(),
-        display_name: form.display_name.trim(),
-        ...(form.description.trim() ? { description: form.description.trim() } : {}),
-        ...(form.version.trim() ? { version: form.version.trim() } : {}),
-        capabilities: caps,
-        invocation_url: form.invocation_url.trim(),
-        protocol: form.protocol,
-        visibility: form.visibility,
-      });
-      await refresh(agent);
-      setSelected(agent);
-      setPanelMode("view");
+      if (panelMode === "create") {
+        const created = await createRegistryAgent(registryUrl, adminToken, formToPayload());
+        await refresh();
+        setSelected(created);
+        setPanelMode("view");
+      } else if (panelMode === "edit" && selected) {
+        const updated = await updateRegistryAgent(registryUrl, adminToken, selected.agent_id, formToPayload());
+        await refresh();
+        setSelected(updated);
+        setPanelMode("view");
+      }
     } catch (err) {
-      if (err instanceof RapApiError) setActionError(`${err.status}: ${err.message}`);
-      else setActionError("Registration failed.");
+      setSaveError(err instanceof RegistryApiError ? err.message : "Save failed.");
     } finally {
-      setSubmitting(false);
+      setSaving(false);
     }
   }
 
-  async function submitEdit(e: React.FormEvent) {
-    e.preventDefault();
+  async function deleteAgent() {
     if (!selected) return;
-    setSubmitting(true);
-    setActionError(null);
-    const slug = slugFromId(selected.id);
+    setDeleting(true);
     try {
-      const caps = form.capabilities
-        .split(/[,\n]/)
-        .map((c) => c.trim())
-        .filter(Boolean);
-      const agent = await rapUpdateAgent(rapUrl, adminKey, slug, {
-        name: slug,
-        display_name: form.display_name.trim(),
-        ...(form.description.trim() ? { description: form.description.trim() } : {}),
-        ...(form.version.trim() ? { version: form.version.trim() } : {}),
-        capabilities: caps,
-        invocation_url: form.invocation_url.trim(),
-        protocol: form.protocol,
-        visibility: form.visibility,
-      });
-      await refresh(agent);
-      setSelected(agent);
+      await deleteRegistryAgent(registryUrl, adminToken, selected.agent_id);
+      const remaining = agents.filter((a) => a.agent_id !== selected.agent_id);
+      await refresh();
+      setSelected(remaining[0] ?? null);
       setPanelMode("view");
-    } catch (err) {
-      if (err instanceof RapApiError) setActionError(`${err.status}: ${err.message}`);
-      else setActionError("Update failed.");
+    } catch {
+      // Reflect actual state via refresh
     } finally {
-      setSubmitting(false);
+      setDeleting(false);
     }
   }
 
-  async function confirmDelete() {
-    if (!selected) return;
-    setSubmitting(true);
-    setActionError(null);
-    const slug = slugFromId(selected.id);
-    try {
-      await rapDeleteAgent(rapUrl, adminKey, slug);
-      setSelected(null);
-      setPanelMode("view");
-      setDeleteConfirm(false);
-      await refresh(null);
-    } catch (err) {
-      if (err instanceof RapApiError) setActionError(`${err.status}: ${err.message}`);
-      else setActionError("Delete failed.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  // ── Not connected: connection form ────────────────────────────────────────
+  // ── Connect gate ─────────────────────────────────────────────────────────────
 
   if (connectState !== "connected") {
     return (
       <PageShell
-        title="RAP Agent Manager"
-        description="Connect to a Registry Access Point to browse, register, update, and delete agent cards."
+        title="Registry Manager"
+        description="Manage agents on your Registry Server."
       >
-        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <form
-            onSubmit={connect}
-            className="rounded-3xl border border-black/10 bg-white p-6 shadow-sm space-y-5"
-          >
-            <Field
-              label="RAP Base URL"
-              value={rapUrl}
-              onChange={setRapUrl}
-              placeholder="http://localhost:3001"
-            />
-            <Field
-              label="Admin API Key"
-              value={adminKey}
-              onChange={setAdminKey}
-              placeholder="your-admin-api-key"
-              type="password"
-            />
-
-            {connectError && (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-                {connectError}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={
-                connectState === "connecting" ||
-                !rapUrl.trim() ||
-                !adminKey.trim()
-              }
-              className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {connectState === "connecting" ? "Connecting…" : "Connect to RAP"}
-            </button>
-          </form>
-
-          <div className="space-y-5 rounded-3xl border border-black/10 bg-slate-50 p-6 text-sm text-slate-600">
-            <div>
-              <p className="font-medium text-slate-800">What is the RAP?</p>
-              <p className="mt-2 leading-6">
-                A Registry Access Point (RAP) is the HTTPS service your
-                organization runs to serve signed AgentCards. GARR stores a
-                pointer to your RAP — resolution fetches cards directly from it.
-              </p>
-            </div>
-
-            <div>
-              <p className="font-medium text-slate-800">Configuration</p>
-              <ul className="mt-2 space-y-2">
-                <li>
-                  <span className="font-medium text-slate-700">RAP Base URL</span>
-                  {" "}— root URL of your RAP server (e.g.,{" "}
-                  <span className="font-mono text-xs">http://localhost:3001</span>)
-                </li>
-                <li>
-                  <span className="font-medium text-slate-700">Admin API Key</span>
-                  {" "}— the{" "}
-                  <span className="font-mono text-xs">ADMIN_API_KEY</span> value
-                  from your RAP server&apos;s .env
-                </li>
-              </ul>
-            </div>
-
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">
-              The admin key is sent directly from your browser to the RAP.
-              Only use this on trusted networks or localhost.
-            </div>
-          </div>
-        </div>
+        <ConnectScreen
+          registryUrl={registryUrl}
+          setRegistryUrl={setRegistryUrl}
+          adminToken={adminToken}
+          setAdminToken={setAdminToken}
+          onConnect={connect}
+          connectState={connectState}
+          connectError={connectError}
+        />
       </PageShell>
     );
   }
 
-  // ── Connected: agent management UI ───────────────────────────────────────
-
-  const publicCount = agents.filter((a) => a.visibility === "public").length;
-  const privateCount = agents.filter((a) => a.visibility === "private").length;
+  // ── Main layout ───────────────────────────────────────────────────────────────
 
   return (
     <PageShell
-      title="RAP Agent Manager"
-      description="Browse and manage agent cards on your Registry Access Point."
+      title="Registry Manager"
+      description={`Connected to ${registryUrl}`}
     >
-      {/* Connection banner */}
-      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-3xl border border-black/10 bg-white p-4 shadow-sm">
-        <span className="flex items-center gap-2 text-sm">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-          <span className="font-medium text-slate-950">{catalog!.domain}</span>
-        </span>
-        <div className="flex gap-3 text-sm text-slate-500">
-          <span>{agents.length} total</span>
-          <span className="text-emerald-600">{publicCount} public</span>
-          {privateCount > 0 && (
-            <span className="text-amber-600">{privateCount} private</span>
-          )}
-        </div>
-        <p className="text-xs text-slate-400">
-          Generated {new Date(catalog!.generated_at).toLocaleTimeString()}
-        </p>
-        <div className="ml-auto flex gap-2">
-          <button
-            onClick={() => refresh()}
-            disabled={refreshing}
-            className="rounded-xl border border-black/10 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-          >
-            {refreshing ? "Refreshing…" : "Refresh"}
-          </button>
-          <button
-            onClick={disconnect}
-            className="rounded-xl border border-black/10 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
-          >
-            Disconnect
-          </button>
-        </div>
-      </div>
+      <div className="grid gap-6 xl:grid-cols-[280px_1fr]">
 
-      {/* Action bar */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-2">
-          {(["all", "public", "private"] as const).map((f) => (
+        {/* Sidebar — agent list */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+              Agents ({agents.length})
+            </span>
             <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "rounded-full border px-4 py-2 text-sm capitalize",
-                filter === f
-                  ? "border-slate-950 bg-slate-950 text-white"
-                  : "border-black/10 bg-white"
-              )}
+              onClick={startCreate}
+              className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
             >
-              {f}
-              {f !== "all" && (
-                <span className="ml-1 text-xs opacity-60">
-                  ({agents.filter((a) => a.visibility === f).length})
-                </span>
-              )}
+              + New
             </button>
-          ))}
+          </div>
+
+          <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1">
+            {agents.length === 0 ? (
+              <div className="rounded-2xl border border-black/10 bg-white p-5 text-center">
+                <p className="text-sm font-medium text-slate-700">No agents yet</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Register your first agent to make it discoverable.
+                </p>
+                <button
+                  onClick={startCreate}
+                  className="mt-3 rounded-2xl bg-slate-950 px-4 py-2 text-xs font-medium text-white"
+                >
+                  + New agent
+                </button>
+              </div>
+            ) : (
+              agents.map((agent) => (
+                <AgentCard
+                  key={agent.agent_id}
+                  agent={agent}
+                  selected={selected?.agent_id === agent.agent_id}
+                  onClick={() => {
+                    setSelected(agent);
+                    setPanelMode("view");
+                    setSaveError(null);
+                  }}
+                />
+              ))
+            )}
+          </div>
         </div>
 
-        {panelMode !== "create" ? (
-          <button
-            onClick={openCreate}
-            className="ml-auto rounded-2xl bg-slate-950 px-5 py-2.5 text-sm font-medium text-white"
-          >
-            + Register Agent
-          </button>
-        ) : (
-          <button
-            onClick={cancelForm}
-            className="ml-auto rounded-2xl border border-black/10 px-5 py-2.5 text-sm text-slate-700"
-          >
-            Cancel
-          </button>
-        )}
-      </div>
+        {/* Main panel */}
+        <div>
+          {panelMode === "create" || panelMode === "edit" ? (
+            <AgentForm
+              mode={panelMode}
+              form={form}
+              patchForm={patchForm}
+              onSave={save}
+              onCancel={() => { setPanelMode("view"); setSaveError(null); }}
+              saving={saving}
+              saveError={saveError}
+            />
+          ) : selected ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={startEdit}
+                  className="rounded-2xl border border-black/10 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={deleteAgent}
+                  disabled={deleting}
+                  className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                >
+                  {deleting ? "Deleting…" : "Delete"}
+                </button>
+              </div>
 
-      {actionError && (
-        <div className="mb-4 rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          {actionError}
-        </div>
-      )}
-
-      {/* Main two-column layout */}
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-
-        {/* Left — agent table */}
-        <div className="overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm">
-          {filtered.length > 0 ? (
-            <table className="w-full table-fixed text-left">
-              <colgroup>
-                <col style={{ width: "38%" }} />
-                <col style={{ width: "20%" }} />
-                <col style={{ width: "24%" }} />
-                <col style={{ width: "18%" }} />
-              </colgroup>
-              <thead className="bg-slate-50 text-xs uppercase tracking-[0.18em] text-slate-500">
-                <tr>
-                  <th className="px-4 py-4">Agent</th>
-                  <th className="px-4 py-4">Protocol</th>
-                  <th className="px-4 py-4">Visibility</th>
-                  <th className="px-4 py-4">Caps</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((agent) => {
-                  const isSelected = selected?.id === agent.id;
-                  return (
-                    <tr
-                      key={agent.id}
-                      onClick={() => {
-                        setSelected(agent);
-                        setPanelMode("view");
-                        setDeleteConfirm(false);
-                        setActionError(null);
-                      }}
+              <div className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm space-y-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-semibold text-slate-950">{selected.display_name}</h2>
+                    <span
                       className={cn(
-                        "cursor-pointer border-t border-black/5 transition-colors",
-                        isSelected
-                          ? "bg-slate-50"
-                          : "hover:bg-slate-50/60"
+                        "rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.15em]",
+                        selected.status === "active"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 bg-slate-50 text-slate-500",
                       )}
                     >
-                      <td className="px-4 py-4 align-top">
-                        <div className="font-medium text-slate-950 break-words">
-                          {agent.display_name}
-                        </div>
-                        <div className="mt-0.5 font-mono text-[11px] text-slate-400 break-all">
-                          {agent.id}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 align-top">
-                        <ProtocolBadge protocol={agent.protocol} />
-                      </td>
-                      <td className="px-4 py-4 align-top">
-                        <VisibilityBadge visibility={agent.visibility} />
-                      </td>
-                      <td className="px-4 py-4 align-top text-sm text-slate-500">
-                        {agent.capabilities.length}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          ) : (
-            <div className="p-10 text-center">
-              <p className="text-sm font-medium text-slate-700">
-                {filter === "all" ? "No agents registered yet." : `No ${filter} agents.`}
-              </p>
-              {filter === "all" && (
-                <p className="mt-2 text-xs text-slate-400">
-                  Use the &quot;Register Agent&quot; button to add your first agent.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+                      {selected.status}
+                    </span>
+                  </div>
+                  <p className="font-mono text-xs text-slate-500">{selected.agent_id}</p>
+                </div>
 
-        {/* Right — detail / form panel */}
-        <div className="min-w-0 space-y-4">
-          {panelMode === "create" && (
-            <AgentForm
-              mode="create"
-              form={form}
-              setForm={setForm}
-              onSubmit={submitCreate}
-              onCancel={cancelForm}
-              submitting={submitting}
-              error={actionError}
-            />
-          )}
+                {selected.description && (
+                  <p className="text-sm text-slate-600">{selected.description}</p>
+                )}
 
-          {panelMode === "edit" && selected && (
-            <AgentForm
-              mode="edit"
-              form={form}
-              setForm={setForm}
-              onSubmit={submitEdit}
-              onCancel={cancelForm}
-              submitting={submitting}
-              error={actionError}
-            />
-          )}
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400">
+                      Card URL
+                    </span>
+                    <a
+                      href={selected.card_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-0.5 block break-all font-mono text-xs text-indigo-600 hover:underline"
+                    >
+                      {selected.card_url}
+                    </a>
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400">
+                      TTL
+                    </span>
+                    <p className="mt-0.5 font-mono text-xs text-slate-700">{selected.ttl_seconds}s</p>
+                  </div>
+                  {selected.tags.length > 0 && (
+                    <div>
+                      <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400">
+                        Tags
+                      </span>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {selected.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full border border-black/10 bg-slate-50 px-2.5 py-1 font-mono text-xs text-slate-700"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
-          {panelMode === "view" && selected && (
-            <>
-              <AgentDetail
-                agent={selected}
-                onEdit={() => openEdit(selected)}
-                onDeleteRequest={() => setDeleteConfirm(true)}
-                deleteConfirm={deleteConfirm}
-                onDeleteConfirm={confirmDelete}
-                onDeleteCancel={() => setDeleteConfirm(false)}
-                submitting={submitting}
-              />
               <JsonPanel data={selected} />
-            </>
-          )}
-
-          {panelMode === "view" && !selected && (
-            <div className="rounded-3xl border border-black/10 bg-white p-10 text-center shadow-sm">
-              <p className="text-sm text-slate-500">
-                Select an agent from the table to see its details.
+            </div>
+          ) : (
+            <div className="rounded-3xl border border-black/10 bg-white p-8 shadow-sm text-center">
+              <p className="text-sm font-medium text-slate-700">Select an agent</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Choose one from the list, or create a new one.
               </p>
             </div>
           )}

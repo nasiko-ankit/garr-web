@@ -5,11 +5,12 @@ import { ArchitectureSection } from "@/components/ArchitectureSection";
 import { SectionHeading } from "@/components/SectionHeading";
 
 const cards = [
-  { href: "/register", title: "Register", desc: "Submit a new EntityOwner" },
-  { href: "/registries", title: "Browse", desc: "View all registries" },
-  { href: "/resolve", title: "Resolve", desc: "Lookup by agent locator" },
-  { href: "/query", title: "Agent Query", desc: "Registry lookup, domain resolve, keyword search" },
-  { href: "/rap", title: "RAP Manager", desc: "Manage agents on your RAP" },
+  { href: "/login", title: "Sign In", desc: "Login with Google or GitHub to manage your index record" },
+  { href: "/dashboard", title: "Dashboard", desc: "Manage your organization's index record" },
+  { href: "/registries", title: "Browse", desc: "View all active organizations in the index" },
+  { href: "/resolve", title: "Resolve", desc: "Lookup an agent by locator" },
+  { href: "/query", title: "Query", desc: "Search index records by org ID or keyword" },
+  { href: "/registry", title: "Registry Manager", desc: "Manage agents on your Registry Server" },
 ];
 
 export default function HomePage() {
