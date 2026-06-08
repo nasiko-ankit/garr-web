@@ -6,22 +6,18 @@ import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/PageShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ApiError, getMe } from "@/lib/garr-api";
-import { getAuthToken, clearAuthToken } from "@/lib/auth";
+import { clearAuthToken } from "@/lib/auth";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
 import type { User } from "@/lib/garr-types";
 
 export default function DashboardPage() {
+  useRequireAuth();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = getAuthToken();
-    if (!token) {
-      router.replace("/login");
-      return;
-    }
-
     getMe()
       .then(setUser)
       .catch((err) => {
@@ -116,7 +112,12 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-slate-400 capitalize">{org.role}</span>
-                    <StatusBadge status="active" />
+                    <StatusBadge status={org.status} />
+                    {!org.email_verified && (
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-amber-600">
+                        verify email
+                      </span>
+                    )}
                   </div>
                 </Link>
               ))}

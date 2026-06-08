@@ -2,21 +2,25 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { navigation } from "@/lib/site-data";
-import { getAuthToken, parseJwtPayload, clearAuthToken } from "@/lib/auth";
+import { getAuthToken, parseJwtPayload, clearAuthToken, isTokenExpired } from "@/lib/auth";
 
 export function Header() {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
   const [displayName, setDisplayName] = useState<string | null>(null);
 
   useEffect(() => {
     const token = getAuthToken();
-    if (!token) return;
+    if (!token || isTokenExpired(token)) {
+      setDisplayName(null);
+      return;
+    }
     const payload = parseJwtPayload(token);
     setDisplayName(payload?.displayName ?? payload?.email ?? null);
-  }, []);
+  }, [pathname]);
 
   function closeMobileMenu() {
     if (detailsRef.current) detailsRef.current.open = false;

@@ -6,9 +6,11 @@ import { PageShell } from "@/components/PageShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { JsonPanel } from "@/components/JsonPanel";
 import { ApiError, getOrgAsOwner, updateOrg, deleteOrg } from "@/lib/garr-api";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
 import type { IndexRecord } from "@/lib/garr-types";
 
 export default function OrgDetailPage() {
+  useRequireAuth();
   const router = useRouter();
   const params = useParams<{ org_id: string }>();
   const orgId = params.org_id;
@@ -45,7 +47,13 @@ export default function OrgDetailPage() {
       setOrg(updated);
       setEditing(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Save failed.");
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else if (err instanceof TypeError && (err as TypeError).message.includes("fetch")) {
+        setError("Cannot reach the server — make sure the backend is running on port 3001.");
+      } else {
+        setError("Save failed. Please try again.");
+      }
     } finally {
       setSaving(false);
     }
@@ -58,7 +66,14 @@ export default function OrgDetailPage() {
       await deleteOrg(orgId);
       router.replace("/dashboard");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Suspend failed.");
+      console.error("[onSuspend] error:", err);
+      if (err instanceof ApiError) {
+        setError(`${err.status}: ${err.message}`);
+      } else if (err instanceof TypeError) {
+        setError(`Network error — ${(err as TypeError).message}. Make sure the backend is running on port 3001.`);
+      } else {
+        setError(`Unexpected error: ${String(err)}`);
+      }
     } finally {
       setSuspending(false);
     }

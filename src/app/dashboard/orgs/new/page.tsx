@@ -6,6 +6,7 @@ import Link from "next/link";
 import { PageShell } from "@/components/PageShell";
 import { ApiError, createOrg } from "@/lib/garr-api";
 import { cn } from "@/lib/utils";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
 import type { IndexRecord } from "@/lib/garr-types";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -230,6 +231,7 @@ function SuccessScreen({ record }: { record: IndexRecord }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function NewOrgPage() {
+  useRequireAuth();
   const router = useRouter();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [step, setStep] = useState<Step>(1);

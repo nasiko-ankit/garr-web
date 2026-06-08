@@ -3,6 +3,7 @@ import type {
   IndexRecord,
   CatalogEntry,
   ResolveResponse,
+  SearchResponse,
   User,
   CreateOrgPayload,
   UpdateOrgPayload,
@@ -51,10 +52,14 @@ function authHeaders(): Record<string, string> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // Only set Content-Type: application/json when there is a body.
+  // DELETE/GET requests have no body — sending the header causes Fastify to
+  // expect a JSON body and reject the request with 400 FST_ERR_CTP_EMPTY_JSON_BODY.
+  const hasBody = !!init?.body;
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      ...(hasBody ? { "Content-Type": "application/json" } : {}),
       ...authHeaders(),
       ...(init?.headers ?? {}),
     },
@@ -73,9 +78,9 @@ export async function getIndexRecord(orgId: string): Promise<IndexRecord> {
   return request<IndexRecord>(`/api/v1/index/${encodeURIComponent(orgId)}`);
 }
 
-/** GET /api/v1/search?q= — search index records. */
-export async function searchIndexRecords(q: string): Promise<{ results: IndexRecord[] }> {
-  return request<{ results: IndexRecord[] }>(`/api/v1/search?q=${encodeURIComponent(q)}`);
+/** GET /api/v1/search?q= — keyword search or URN lookup. Returns { query, count, results }. */
+export async function searchIndexRecords(q: string): Promise<SearchResponse> {
+  return request<SearchResponse>(`/api/v1/search?q=${encodeURIComponent(q)}`);
 }
 
 /**
@@ -95,6 +100,11 @@ export async function fetchAgentRecord(registryUrl: string, agentId: string): Pr
     cache: "no-store",
   });
   return parseApiResponse<CatalogEntry>(res);
+}
+
+/** GET /auth/providers — which OAuth providers are configured on the server. */
+export async function getAuthProviders(): Promise<{ google: boolean; github: boolean }> {
+  return request<{ google: boolean; github: boolean }>('/auth/providers');
 }
 
 /** POST /auth/register — create account with email + password. Returns JWT. */
