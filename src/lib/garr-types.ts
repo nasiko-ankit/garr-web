@@ -49,6 +49,14 @@ export interface OrgMembership {
   org_id: string;
   display_name: string;
   role: string;
+  status: OrgStatus;
+  email_verified: boolean;
+}
+
+export interface SearchResponse {
+  query: string;
+  count: number;
+  results: IndexRecord[];
 }
 
 export interface CreateOrgPayload {

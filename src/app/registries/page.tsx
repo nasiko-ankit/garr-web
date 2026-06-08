@@ -6,10 +6,13 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { JsonPanel } from "@/components/JsonPanel";
 import { TableEmptyState } from "@/components/TableEmptyState";
 import { ApiError, listIndexRecords } from "@/lib/garr-api";
+import { getAuthToken, isTokenExpired } from "@/lib/auth";
 import type { IndexRecord, OrgStatus } from "@/lib/garr-types";
 
 export default function RegistriesPage() {
   const [statusFilter, setStatusFilter] = useState<OrgStatus | "all">("active");
+  // Start false to match SSR; flip after mount to avoid hydration mismatch
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [items, setItems] = useState<IndexRecord[]>([]);
   const [selected, setSelected] = useState<IndexRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,6 +36,11 @@ export default function RegistriesPage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    const t = getAuthToken();
+    setIsLoggedIn(!!t && !isTokenExpired(t));
+  }, []);
 
   useEffect(() => {
     load();
@@ -72,8 +80,8 @@ export default function RegistriesPage() {
         <TableEmptyState
           title="No organizations found"
           description="No organizations match the selected filter."
-          actionLabel="Sign in to register"
-          actionHref="/login"
+          actionLabel={isLoggedIn ? "Register your organization" : "Sign in to register"}
+          actionHref={isLoggedIn ? "/dashboard/orgs/new" : "/login"}
         />
       ) : (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
