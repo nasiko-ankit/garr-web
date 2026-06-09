@@ -27,17 +27,23 @@ export default function OrgDetailPage() {
   const [domain, setDomain] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+
     getOrgAsOwner(orgId)
       .then((data) => {
+        if (cancelled) return;
         setOrg(data);
         setDisplayName(data.display_name);
         setRegistryUrl(data.registry_url);
         setDomain(data.domain);
       })
       .catch((err) => {
+        if (cancelled) return;
         setError(err instanceof ApiError ? err.message : "Could not load org.");
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
   }, [orgId]);
 
   async function onSave() {

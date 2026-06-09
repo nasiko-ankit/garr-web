@@ -18,9 +18,12 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     getMe()
-      .then(setUser)
+      .then((data) => { if (!cancelled) setUser(data); })
       .catch((err) => {
+        if (cancelled) return;
         if (err instanceof ApiError && err.status === 401) {
           clearAuthToken();
           router.replace("/login");
@@ -28,11 +31,14 @@ export default function DashboardPage() {
           setError("Could not load profile.");
         }
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
   }, [router]);
 
   function signOut() {
     clearAuthToken();
+    setLoading(true);
     router.replace("/");
   }
 
